@@ -1,28 +1,96 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Retrieve credentials from Vite client env
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Retrieve credentials safely from Vite client env
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl && 
-  supabaseAnonKey && 
-  supabaseUrl !== 'https://your-project.supabase.co' && 
-  supabaseAnonKey !== 'your-anon-key'
+/**
+ * Validates whether a string is a valid HTTP or HTTPS URL
+ */
+function isValidHttpOrHttpsUrl(urlString: string): boolean {
+  if (!urlString || typeof urlString !== 'string') return false;
+  const trimmed = urlString.trim();
+  if (!trimmed.toLowerCase().startsWith('http://') && !trimmed.toLowerCase().startsWith('https://')) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Checks if a value is a placeholder or template value
+ */
+function isPlaceholder(value: string): boolean {
+  if (!value || typeof value !== 'string') return true;
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed.length === 0) return true;
+
+  const knownPlaceholders = [
+    'https://your-project.supabase.co',
+    'http://your-project.supabase.co',
+    'your-project.supabase.co',
+    'your-project',
+    'your-anon-key',
+    'your_anon_key',
+    'your-key',
+    'my_supabase_url',
+    'my_supabase_anon_key',
+    'placeholder',
+    'undefined',
+    'null',
+    'none',
+  ];
+
+  if (knownPlaceholders.includes(trimmed)) return true;
+  if (trimmed.includes('<project>') || trimmed.includes('<your-project>') || trimmed.includes('your-project')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Strict validation: URL must be valid HTTP/HTTPS and key must be non-empty & not a placeholder
+ */
+export const isSupabaseConfigured: boolean = Boolean(
+  rawUrl &&
+  rawKey &&
+  !isPlaceholder(rawUrl) &&
+  !isPlaceholder(rawKey) &&
+  isValidHttpOrHttpsUrl(rawUrl)
 );
 
 /**
- * Singleton Supabase Client
- * If not configured, returns null and application operates gracefully in local state
+ * Safe Supabase Client Initializer
+ * Wraps initialization in try/catch to ensure unhandled initialization exceptions never crash React
  */
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
+function createSafeSupabaseClient(): SupabaseClient | null {
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+
+  try {
+    return createClient(rawUrl, rawKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
       },
-    })
-  : null;
+    });
+  } catch (err) {
+    console.warn('Falha segura na inicialização do Supabase Client (mantendo modo Paper Trading local):', err);
+    return null;
+  }
+}
+
+/**
+ * Singleton Supabase Client
+ * If unconfigured or initialization fails, remains null and app uses local Paper Trading engine
+ */
+export const supabase: SupabaseClient | null = createSafeSupabaseClient();
 
 export type SupabaseConnectionStatus = 'connected' | 'unconfigured' | 'error' | 'checking';
 
@@ -38,9 +106,9 @@ export interface SupabaseHealthResult {
  * Masked URL helper for UI display (e.g. https://xyz***.supabase.co)
  */
 export function getMaskedSupabaseUrl(): string {
-  if (!supabaseUrl || !isSupabaseConfigured) return '';
+  if (!rawUrl || !isSupabaseConfigured || !isValidHttpOrHttpsUrl(rawUrl)) return '';
   try {
-    const parsed = new URL(supabaseUrl);
+    const parsed = new URL(rawUrl);
     const host = parsed.hostname;
     const parts = host.split('.');
     if (parts.length > 2) {
@@ -52,7 +120,7 @@ export function getMaskedSupabaseUrl(): string {
     }
     return host;
   } catch {
-    return 'supabase.co';
+    return '';
   }
 }
 
@@ -60,12 +128,13 @@ export function getMaskedSupabaseUrl(): string {
  * Database Status Helper
  */
 export function getDatabaseStatus() {
+  const isReady = Boolean(isSupabaseConfigured && supabase);
   return {
-    isConfigured: isSupabaseConfigured,
-    url: isSupabaseConfigured ? supabaseUrl : 'Não configurado (Usando Local Paper Engine)',
+    isConfigured: isReady,
+    url: isReady ? rawUrl : 'Não configurado (Usando Local Paper Engine)',
     maskedHost: getMaskedSupabaseUrl(),
     provider: 'PostgreSQL / Supabase',
-    storageMode: isSupabaseConfigured ? 'Cloud PostgreSQL' : 'Local In-Memory / LocalStorage',
+    storageMode: isReady ? 'Cloud PostgreSQL' : 'Local In-Memory / LocalStorage',
   };
 }
 
