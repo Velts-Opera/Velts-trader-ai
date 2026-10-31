@@ -66,8 +66,8 @@ VELTS TRADER AI is an institutional-grade algorithmic trading workstation design
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/SEU-USUARIO/velts-trader-ai.git
-cd velts-trader-ai
+git clone https://github.com/Velts-Opera/Velts-trader-ai.git
+cd Velts-trader-ai
 ```
 
 ### 2. Install dependencies
