@@ -63,14 +63,14 @@ const auditTrail: AuditLogEntry[] = [
 
 // Initialize Google GenAI on server-side with telemetry User-Agent header
 // CRITICAL: The AI has ZERO access to broker API keys or banking credentials!
-const ai = new GoogleGenAI({
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',
     },
   },
-});
+}) : null;
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -150,7 +150,7 @@ app.post('/api/agents/analyze', async (req, res) => {
 
   try {
     // If GEMINI_API_KEY is present, generate real LLM synthesis
-    if (process.env.GEMINI_API_KEY) {
+    if (ai) {
       const prompt = `
 Você é o sistema multi-agente do VELTS TRADER AI, uma plataforma autônoma de trading institucional.
 Analise o ativo: ${symbol}
