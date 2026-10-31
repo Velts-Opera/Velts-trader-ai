@@ -1,0 +1,6 @@
+{
+  "name": "VELTS TRADER AI",
+  "description": "Plataforma autônoma de trading com inteligência artificial, análise quantitativa, gerenciamento de risco determinístico e paper trading multi-mercado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
