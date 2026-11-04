@@ -57,7 +57,7 @@ export function evaluateOrderRisk(
   config: RiskConfig = DEFAULT_RISK_CONFIG
 ): RiskEvaluationResult {
   const violations: string[] = [];
-  if (![currentEquity, dailyPnL, weeklyPnL, order.quantity, order.targetPrice, order.stopLossPrice].every(Number.isFinite) || currentEquity <= 0 || order.quantity <= 0 || !order.targetPrice || order.targetPrice <= 0 || !order.stopLossPrice || order.stopLossPrice <= 0) {
+  if (![currentEquity, dailyPnL, weeklyPnL, order.quantity, order.targetPrice ?? NaN, order.stopLossPrice ?? NaN].every(Number.isFinite) || currentEquity <= 0 || order.quantity <= 0 || !order.targetPrice || order.targetPrice <= 0 || !order.stopLossPrice || order.stopLossPrice <= 0) {
     violations.push('Parâmetros financeiros inválidos: operação bloqueada.');
   }
   if (![config.maxRiskPerTradePct, config.maxAssetExposurePct, config.dailyLossLimitPct, config.weeklyLossLimitPct].every(v => Number.isFinite(v) && v > 0)) {
