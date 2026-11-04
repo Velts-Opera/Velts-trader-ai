@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MarketAsset, Currency, RiskConfig, StrategyDefinition, Position, Order, CommitteeDecision } from './types/trading';
-import { INITIAL_ASSETS, EUR_USD_RATE, simulateMarketTick } from './services/marketData';
+import { INITIAL_ASSETS, EUR_USD_RATE } from './services/marketData';
 import { DEFAULT_RISK_CONFIG } from './core/riskManager';
 import { PaperAccount, processOrderExecution, updatePositionsMarketPrice } from './core/tradingEngine';
 import { Header } from './components/layout/Header';
@@ -102,82 +102,55 @@ export default function App() {
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
 
-  // Market Live Micro-Tick Simulator & Stop-Loss/Take-Profit Automated Monitor
   useEffect(() => {
-    const interval = setInterval(() => {
-      setAssets((prev) => {
-        const updated = simulateMarketTick(prev);
-        const priceMap: Record<string, number> = {};
-        updated.forEach((a) => {
-          priceMap[a.symbol] = a.price;
-        });
-
-        setAccount((prevAccount) => {
-          if (prevAccount.positions.length === 0) return prevAccount;
-          const { updatedAccount, triggeredOrders } = updatePositionsMarketPrice(prevAccount, priceMap);
-          if (triggeredOrders.length > 0) {
-            triggeredOrders.forEach((o) => {
-              dbService.recordAudit('AUTOMATIC_TRIGGER_EXIT', { orderId: o.id, symbol: o.symbol });
-            });
-          }
+    let stopped = false;
+    let inFlight = false;
+    const updateQuotes = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch('/api/market/binance/quotes', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Binance Spot indisponível');
+        const data = await response.json() as {
+          quotes: Record<string, Pick<MarketAsset,
+            'price' | 'change24h' | 'high24h' | 'low24h' | 'volume24h' | 'bid' | 'ask' | 'spread'>>;
+        };
+        if (stopped) return;
+        setAssets(previous => previous.map(asset => {
+          if (asset.category !== 'crypto') return asset;
+          const pair = asset.symbol.replace('/', '') + 'T';
+          const quote = data.quotes[pair];
+          return quote ? { ...asset, ...quote } : asset;
+        }));
+        const prices: Record<string, number> = {};
+        for (const asset of assetsRef.current) {
+          const pair = asset.symbol.replace('/', '') + 'T';
+          const quote = data.quotes[pair];
+          if (quote) prices[asset.symbol] = quote.price;
+        }
+        setAccount(previous => {
+          if (previous.positions.length === 0) return previous;
+          const { updatedAccount } = updatePositionsMarketPrice(previous, prices);
           return updatedAccount;
         });
-
-        return updated;
-      });
-    }, 2000);
-
-    return () => clearInterval(interval);
+      } catch (error) {
+        // Do not create or alter prices when upstream market data fails.
+        console.warn('Real Binance quotes unavailable; previous snapshot retained.', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+    void updateQuotes();
+    const interval = setInterval(() => void updateQuotes(), 10_000);
+    return () => { stopped = true; clearInterval(interval); };
   }, []);
 
-  // Automated Strategy Execution Cycle
+  // Automated execution is disabled until strategy signals are validated
+  // against live Binance data, backtests and the deterministic risk gate.
   const runAutomatedStrategyCycle = () => {
-    if (riskConfig.emergencyStopActivated) return;
-
-    const activeStrats = strategies.filter((s) => s.isActive);
-    if (activeStrats.length === 0) return;
-
-    const targetAsset = assets[Math.floor(Math.random() * assets.length)];
-    const chosenStrat = activeStrats[Math.floor(Math.random() * activeStrats.length)];
-
-    const slDist = targetAsset.price * 0.02;
-    const stopLossPrice = targetAsset.price - slDist;
-    const takeProfitPrice = targetAsset.price + slDist * 2.5;
-
-    setAccount((prevAccount) => {
-      const { account: newAcc, execution } = processOrderExecution(
-        {
-          symbol: targetAsset.symbol,
-          side: 'BUY',
-          type: 'MARKET',
-          quantity: 1,
-          targetPrice: targetAsset.price,
-          stopLossPrice,
-          takeProfitPrice,
-          currency: targetAsset.currency,
-          strategyId: chosenStrat.id,
-        },
-        prevAccount,
-        targetAsset.spread,
-        riskConfig
-      );
-
-      if (execution.order.state === 'FILLED') {
-        dbService.recordAudit('ORDER_FILLED_AUTO', { symbol: targetAsset.symbol, strat: chosenStrat.name });
-      }
-
-      return newAcc;
-    });
+    console.warn('Automated trading blocked: validated market scanner not ready.');
+    setIsAutomatedRunning(false);
   };
-
-  useEffect(() => {
-    if (!isAutomatedRunning) return;
-    const autoInterval = setInterval(() => {
-      runAutomatedStrategyCycle();
-    }, 15000);
-
-    return () => clearInterval(autoInterval);
-  }, [isAutomatedRunning, strategies, riskConfig, assets]);
 
   // Order execution from modal or agent ticket
   const handleExecuteOrder = (params: {
