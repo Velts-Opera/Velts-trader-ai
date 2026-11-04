@@ -6,6 +6,8 @@ GitHub: [Velts-Opera](https://github.com/Velts-Opera)
 
 Plataforma em desenvolvimento para acompanhamento de mercados, análise quantitativa de criptomoedas, gestão de risco e simulação de operações.
 
+> **Para recrutadores e parceiros:** [Estudo de caso do projeto](PORTFOLIO.md).
+
 ## Visão geral
 
 O CodexTrader V1 está sendo desenvolvido como uma aplicação web de análise e monitoramento de oportunidades de negociação. O objetivo é combinar dados verificáveis de mercado, indicadores técnicos e controles de risco antes de considerar qualquer execução com capital real.
