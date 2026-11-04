@@ -41,37 +41,18 @@ app.use('/api', (req, res, next) => {
 });
 
 // In-Memory Immutable Audit Log Chaining
-const auditTrail: AuditLogEntry[] = [
-  {
-    id: 'log_boot_001',
-    timestamp: Date.now() - 3600000,
-    eventType: 'VAULT_ACCESS_ATTEMPT',
-    severity: 'INFO',
-    actor: 'SYSTEM',
-    details: { message: 'Cofre de credenciais inicializado com criptografia AES-256-GCM. Isolamento de IA confirmado.' },
-    signature: generateAuditSignature(Date.now() - 3600000, 'VAULT_ACCESS_ATTEMPT', 'SYSTEM_BOOT'),
-  },
-  {
-    id: 'log_boot_002',
-    timestamp: Date.now() - 1800000,
-    eventType: 'RISK_GATE_APPROVED',
-    severity: 'INFO',
-    actor: 'RISK_ENGINE',
-    details: { message: 'Limites determinísticos ativos: max 0.5% risco, 2% perda diária, 5% perda semanal, alavancagem 1x.' },
-    signature: generateAuditSignature(Date.now() - 1800000, 'RISK_GATE_APPROVED', 'RULES_ACTIVE'),
-  },
-];
+const auditTrail: AuditLogEntry[] = [];
 
 // Initialize Google GenAI on server-side with telemetry User-Agent header
 // CRITICAL: The AI has ZERO access to broker API keys or banking credentials!
-const ai = new GoogleGenAI({
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',
     },
   },
-});
+}) : null;
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -127,21 +108,21 @@ app.get('/api/security/status', (req, res) => {
     brokerConnections: [
       {
         broker: 'Interactive Brokers (Gateway)',
-        status: 'SANDBOX_READY',
+        status: 'NOT_CONNECTED',
         authType: 'OAuth 2.0 / Client Cert',
         readOnly: true,
         withdrawalBlocked: true,
       },
       {
         broker: 'Binance Institutional Spot',
-        status: 'PAPER_TRADING_ACTIVE',
+        status: 'NOT_CONNECTED',
         authType: 'HMAC-SHA256 Encrypted Key',
         readOnly: true,
         withdrawalBlocked: true,
       },
       {
         broker: 'Banco Central / Open Finance Sandbox',
-        status: 'READY',
+        status: 'NOT_CONNECTED',
         authType: 'mTLS / JWT B2B',
         readOnly: true,
         withdrawalBlocked: true,
@@ -184,7 +165,7 @@ app.post('/api/agents/analyze', async (req, res) => {
   if (!symbol) {
     return res.status(400).json({ error: 'Asset symbol is required' });
   }
-  if (!process.env.GEMINI_API_KEY) {
+  if (!ai) {
     return res.status(503).json({ error: 'Módulo opcional Gemini não configurado.' });
   }
 
