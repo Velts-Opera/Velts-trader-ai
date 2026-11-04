@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { MarketAsset, Position, Order, Currency, RiskConfig } from '../../types/trading';
+import { MarketAsset, Position, Order, Currency, RiskConfig, Candle } from '../../types/trading';
 import { TradingChart } from './TradingChart';
 import { buildIndicatorSnapshot } from '../../core/indicators';
-import { generateCandlesForAsset } from '../../services/marketData';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -54,14 +53,35 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 }) => {
   const [closingPosId, setClosingPosId] = useState<string | null>(null);
 
-  // Generate candle series and indicator snapshot for selected asset
-  const candles = React.useMemo(() => {
-    return generateCandlesForAsset(selectedAsset.price, 60, 60);
-  }, [selectedAsset.symbol, selectedAsset.price]);
+  // Candles are always loaded from the public Binance Spot API.
+  const [candles, setCandles] = React.useState<Candle[]>([]);
+  const [candlesError, setCandlesError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setCandles([]);
+    setCandlesError(null);
+    const pair = selectedAsset.symbol.replace('/', '') + 'T';
+    fetch(`/api/market/binance/candles?symbol=${encodeURIComponent(pair)}&interval=1h&limit=200`, {
+      signal: controller.signal, cache: 'no-store',
+    }).then(async response => {
+      if (!response.ok) throw new Error('Não foi possível consultar candles reais.');
+      const payload = await response.json() as { candles: Candle[] };
+      if (!Array.isArray(payload.candles) || payload.candles.length < 50) {
+        throw new Error('Histórico insuficiente para os indicadores.');
+      }
+      if (!controller.signal.aborted) setCandles(payload.candles);
+    }).catch(error => {
+      if (!controller.signal.aborted) {
+        setCandlesError(error instanceof Error ? error.message : 'Dados indisponíveis.');
+      }
+    });
+    return () => controller.abort();
+  }, [selectedAsset.symbol]);
 
-  const indicators = React.useMemo(() => {
-    return buildIndicatorSnapshot(candles);
-  }, [candles]);
+  const indicators = React.useMemo(
+    () => candles.length >= 50 ? buildIndicatorSnapshot(candles) : null,
+    [candles],
+  );
 
   const currentEquity = currency === 'USD' ? equityUSD : equityEUR;
   const currentCash = currency === 'USD' ? cashUSD : cashEUR;
@@ -187,12 +207,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             ))}
           </div>
 
-          <TradingChart
-            candles={candles}
-            symbol={selectedAsset.symbol}
-            indicators={indicators}
-            currency={currency}
-          />
+          {indicators ? (
+            <TradingChart
+              candles={candles}
+              symbol={selectedAsset.symbol}
+              indicators={indicators}
+              currency={currency}
+            />
+          ) : (
+            <div className="rounded border border-slate-800 bg-slate-900/60 p-8 text-sm text-slate-400">
+              {candlesError || 'Carregando candles reais da Binance Spot...'}
+            </div>
+          )}
         </div>
 
         {/* Right 1 col: Fast Action Card & Agent Status */}
@@ -241,7 +267,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Consenso quantitativo para <strong>{selectedAsset.symbol}</strong>: Tendência {indicators.trend} com RSI em {indicators.rsi14.toFixed(1)}.
+              {indicators
+                ? <>Leitura técnica de <strong>{selectedAsset.symbol}</strong>: tendência {indicators.trend}, RSI {indicators.rsi14.toFixed(1)}. Não constitui sinal de operação.</>
+                : 'Aguardando candles reais para calcular indicadores.'}
             </p>
 
             <button
