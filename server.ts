@@ -1,6 +1,7 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import { BINANCE_SPOT_PAIRS, fetchSpotQuotes, fetchSpotCandles, validatePair, validateInterval } from './src/services/binanceSpot';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { SlidingWindowRateLimiter, generateAuditSignature, AuditLogEntry, INSTITUTIONAL_SECURITY_POLICY } from './src/core/security';
@@ -80,6 +81,42 @@ app.get('/api/health', (req, res) => {
     geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     service: 'VELTS TRADER AI Core Server',
   });
+});
+
+
+/**
+ * Public Binance Spot market data. Read-only, no broker credentials or order permissions.
+ * A failed request is surfaced as HTTP 503: never substitute invented prices.
+ */
+app.get('/api/market/binance/status', (_req, res) => {
+  res.json({ provider: 'Binance Spot Public API', mode: 'READ_ONLY',
+    symbols: BINANCE_SPOT_PAIRS, tradingEnabled: false, simulatedOrdersOnly: true });
+});
+
+app.get('/api/market/binance/quotes', async (_req, res) => {
+  try {
+    const quotes = await fetchSpotQuotes();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ provider: 'BINANCE_SPOT', asOf: Date.now(), quotes });
+  } catch (error) {
+    console.error('Binance market quotes unavailable', error);
+    return res.status(503).json({ error: 'Dados de mercado indisponíveis. Sem cotação simulada.' });
+  }
+});
+
+app.get('/api/market/binance/candles', async (req, res) => {
+  try {
+    const symbol = validatePair(String(req.query.symbol ?? ''));
+    const interval = validateInterval(String(req.query.interval ?? '5m'));
+    const limit = Number(req.query.limit ?? 200);
+    const candles = await fetchSpotCandles(symbol, interval, limit);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ provider: 'BINANCE_SPOT', symbol, interval, candles });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const invalid = message.includes('não autorizado') || message.includes('inválido');
+    return res.status(invalid ? 400 : 503).json({ error: invalid ? message : 'Candles indisponíveis na Binance.' });
+  }
 });
 
 // Security & Vault Status Endpoint
