@@ -31,10 +31,7 @@ export default function App() {
   const [isAutomatedRunning, setIsAutomatedRunning] = useState(false);
 
   // Authenticated operator session
-  const [currentUser, setCurrentUser] = useState<{ email: string; name: string } | null>({
-    email: 'veltrani@gmail.com',
-    name: 'Carlos Veltrani',
-  });
+  const [currentUser, setCurrentUser] = useState<{ email: string; name: string } | null>(null);
 
   // Initialize paper trading account with $100,000 USD virtual balance
   const [account, setAccount] = useState<PaperAccount>({
