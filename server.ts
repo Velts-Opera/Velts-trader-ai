@@ -184,6 +184,9 @@ app.post('/api/agents/analyze', async (req, res) => {
   if (!symbol) {
     return res.status(400).json({ error: 'Asset symbol is required' });
   }
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(503).json({ error: 'Módulo opcional Gemini não configurado.' });
+  }
 
   try {
     // If GEMINI_API_KEY is present, generate real LLM synthesis
@@ -254,99 +257,10 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido no seguinte formato:
       }
     }
 
-    // Deterministic Quant Committee Fallback
-    const rsi = indicators?.rsi14 ?? 50;
-    const trend = indicators?.trend ?? 'NEUTRAL';
-    const atr = indicators?.atr14 ?? price * 0.02;
+    return res.status(503).json({
+      error: 'Análise indisponível. Respostas artificiais desativadas por segurança.',
+    });
 
-    const isBullish = rsi > 45 && rsi < 68 && trend === 'BULLISH';
-    const isBearish = rsi < 40 || trend === 'BEARISH';
-
-    const action = isBullish ? 'BUY' : isBearish ? 'SELL' : 'HOLD';
-    const stopDistance = Math.max(atr * 1.5, price * 0.02);
-    const stopLoss = action === 'BUY' ? Number((price - stopDistance).toFixed(4)) : Number((price + stopDistance).toFixed(4));
-    const targetPrice = action === 'BUY' ? Number((price + stopDistance * 2).toFixed(4)) : Number((price - stopDistance * 2).toFixed(4));
-
-    const technicalSentiment = isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
-    const quantSentiment = indicators?.macd?.histogram > 0 ? 'BULLISH' : 'BEARISH';
-
-    const decision = {
-      symbol,
-      action,
-      confidenceScore: isBullish ? 78 : isBearish ? 72 : 55,
-      targetPrice,
-      recommendedStopLoss: stopLoss,
-      recommendedTakeProfit: targetPrice,
-      riskPassed: true,
-      riskManagerComments: `Parâmetros de risco validados. Risco planejado por operação em conformidade com teto de 0.5% e Stop-Loss definido a ${stopLoss}.`,
-      supervisorRationale: `Consenso estabelecido entre os agentes técnico (${technicalSentiment}) e quantitativo (${quantSentiment}). Gestão de risco aprovou os limites operacionais.`,
-      reports: [
-        {
-          agentRole: 'TECHNICAL',
-          agentName: 'Agente Técnico (Quant & Chart)',
-          sentiment: technicalSentiment,
-          confidencePct: isBullish ? 82 : isBearish ? 75 : 58,
-          summary: `RSI em ${rsi.toFixed(1)}, histograma MACD em ${indicators?.macd?.histogram?.toFixed(4) ?? 0}. Tendência estrutural ${trend}.`,
-          keyPoints: [
-            `Suporte imediato detectado em $${indicators?.supportLevel?.toFixed(2) ?? (price * 0.96).toFixed(2)}`,
-            `Resistência chave em $${indicators?.resistanceLevel?.toFixed(2) ?? (price * 1.04).toFixed(2)}`,
-            `Volatilidade medida por ATR(14): ${atr.toFixed(4)}`,
-          ],
-        },
-        {
-          agentRole: 'FUNDAMENTAL',
-          agentName: 'Agente Fundamentalista (Macro & SEC)',
-          sentiment: 'NEUTRAL',
-          confidencePct: 65,
-          summary: 'Análise de liquidez e estabilidade macroeconômica. Sem anúncios de juros ou balanços adversos no curto prazo.',
-          keyPoints: [
-            'Taxas de juros em consonância com as projeções do banco central',
-            'Liquidez de livro de ofertas estável nos pares principais',
-            'Fluxo institucional monitorado via relatórios 13F neutro-positivo',
-          ],
-        },
-        {
-          agentRole: 'QUANTITATIVE',
-          agentName: 'Agente Quantitativo (Probabilidades & Regimes)',
-          sentiment: quantSentiment,
-          confidencePct: 74,
-          summary: `Probabilidade estimada de continuidade de tendência calculada em 64.2%. Regime de mercado: ${trend}.`,
-          keyPoints: [
-            'Ausência de sobreajuste estatístico no ciclo de 30 dias',
-            'Correlação cruzada controlada com índices de referência',
-            'Expectativa matemática calculada positiva (+1.42 R:R)',
-          ],
-        },
-        {
-          agentRole: 'RISK_MANAGER',
-          agentName: 'Gerenciador de Risco (Guardião Determinístico)',
-          sentiment: 'NEUTRAL',
-          confidencePct: 95,
-          summary: 'Validação determinística de exposição e stop-loss. Operação autorizada dentro dos parâmetros.',
-          riskClearance: true,
-          keyPoints: [
-            'Risco máximo por operação limitado a 0.5% do capital',
-            `Stop-loss obrigatório ancorado em ${stopLoss} (distância segura)`,
-            'Alavancagem desabilitada (1x spot)',
-          ],
-        },
-        {
-          agentRole: 'SUPERVISOR',
-          agentName: 'Supervisor Geral (Comitê Executivo)',
-          sentiment: technicalSentiment,
-          confidencePct: 76,
-          summary: `Recomendação final: ${action}. O comitê validou todos os critérios com aprovação unânime do Gerenciador de Risco.`,
-          keyPoints: [
-            `Ação recomendada: ${action}`,
-            `Alvo projetado: ${targetPrice}`,
-            `Proteção Stop-Loss: ${stopLoss}`,
-          ],
-        },
-      ],
-      timestamp: Date.now(),
-    };
-
-    return res.json(decision);
   } catch (err: any) {
     console.error('Error during agent analysis:', err);
     res.status(500).json({ error: 'Falha na deliberação dos agentes', details: err.message });
