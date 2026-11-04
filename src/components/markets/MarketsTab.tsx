@@ -36,7 +36,7 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
     return matchesCategory && matchesSearch;
   });
 
-  const orderBook = generateOrderBook(inspectedAsset.price, inspectedAsset.decimalPlaces);
+  const orderBook = generateOrderBook(inspectedAsset.price, inspectedAsset.decimalPlaces); // Visualization only; not real exchange liquidity.
 
   return (
     <div className="space-y-6">
@@ -77,7 +77,7 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
         <div className="lg:col-span-3 bg-slate-900/60 border border-slate-800 rounded-lg overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-              Cotações em Tempo Real ({filteredAssets.length} Ativos)
+              Cotações Binance Spot ({filteredAssets.length} Ativos)
             </h3>
             <span className="text-[11px] text-slate-500 font-mono">Spread & Liquidez Spot</span>
           </div>
@@ -166,9 +166,9 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
         <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-4 space-y-4">
           <div className="border-b border-slate-800 pb-2">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-              Livro de Ofertas (Depth)
+              Profundidade Ilustrativa
             </h3>
-            <span className="text-[11px] text-slate-400 font-mono">{inspectedAsset.symbol}</span>
+            <span className="text-[11px] text-slate-400 font-mono">{inspectedAsset.symbol} — dados simulados, não usar para negociar</span>
           </div>
 
           <div className="space-y-3 font-mono text-[11px]">
