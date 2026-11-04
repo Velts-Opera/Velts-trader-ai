@@ -21,7 +21,8 @@ import { dbService } from './lib/supabase';
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [currency, setCurrency] = useState<Currency>('USD');
-  const [assets, setAssets] = useState<MarketAsset[]>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<MarketAsset[]>(INITIAL_ASSETS.filter(a => a.category === 'crypto'));
+  const [isMarketDataReady, setIsMarketDataReady] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MarketAsset>(INITIAL_ASSETS[0]);
   const [riskConfig, setRiskConfig] = useState<RiskConfig>(DEFAULT_RISK_CONFIG);
 
@@ -113,6 +114,11 @@ export default function App() {
             'price' | 'change24h' | 'high24h' | 'low24h' | 'volume24h' | 'bid' | 'ask' | 'spread'>>;
         };
         if (stopped) return;
+        setIsMarketDataReady(true);
+        setSelectedAsset(previous => {
+          const quote = data.quotes[previous.symbol.replace('/', '') + 'T'];
+          return quote ? { ...previous, ...quote } : previous;
+        });
         setAssets(previous => previous.map(asset => {
           if (asset.category !== 'crypto') return asset;
           const pair = asset.symbol.replace('/', '') + 'T';
@@ -132,6 +138,7 @@ export default function App() {
         });
       } catch (error) {
         // Do not create or alter prices when upstream market data fails.
+        if (!stopped) setIsMarketDataReady(false);
         console.warn('Real Binance quotes unavailable; previous snapshot retained.', error);
       } finally {
         inFlight = false;
@@ -233,7 +240,12 @@ export default function App() {
 
       {/* Main Workspace Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
-        {activeTab === 'dashboard' && (
+        {!isMarketDataReady && (
+          <div role="status" className="mb-4 rounded border border-amber-600/40 bg-slate-900 p-4 text-sm text-amber-300">
+            Binance Spot indisponível ou aguardando atualização. Cotações demonstrativas não serão apresentadas.
+          </div>
+        )}
+        {activeTab === 'dashboard' && isMarketDataReady && (
           <OverviewTab
             assets={assets}
             selectedAsset={selectedAsset}
@@ -254,7 +266,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'markets' && (
+        {activeTab === 'markets' && isMarketDataReady && (
           <MarketsTab
             assets={assets}
             onSelectAsset={setSelectedAsset}
@@ -266,7 +278,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'agents' && (
+        {activeTab === 'agents' && isMarketDataReady && (
           <AgentsTab
             assets={assets}
             selectedAsset={selectedAsset}
