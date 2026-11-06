@@ -55,9 +55,9 @@ export const SecurityCenterTab: React.FC = () => {
       withdrawalsDisabled: true,
     },
     {
-      name: 'Binance Institutional Spot',
-      assetType: 'Criptomoedas Spot (BTC, ETH, SOL)',
-      authMethod: 'HMAC-SHA256 Encrypted Sign',
+      name: 'Binance Spot Public API',
+      assetType: 'BTC, ETH, SOL e BNB / USDT',
+      authMethod: 'Nenhuma credencial — dados públicos',
       status: 'API PÚBLICA / SEM CHAVE',
       keyStorage: 'Não necessário para market data',
       readOnly: true,
