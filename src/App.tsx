@@ -179,7 +179,7 @@ export default function App() {
         riskConfig
       );
 
-      dbService.saveOrder(execution.order, currentUser?.email);
+      dbService.saveOrder(execution.order);
       return newAcc;
     });
   };
