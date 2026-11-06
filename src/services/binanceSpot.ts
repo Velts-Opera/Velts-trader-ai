@@ -4,6 +4,13 @@ export const BINANCE_SPOT_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'] a
 export type BinancePair = (typeof BINANCE_SPOT_PAIRS)[number];
 export type BinanceInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 
+export type OrderBookLevel = { price: number; quantity: number; notional: number };
+export type BinanceOrderBook = {
+  lastUpdateId: number;
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
+};
+
 type BinanceTicker = {
   symbol: string;
   lastPrice: string;
@@ -51,6 +58,31 @@ export function parseBinanceTicker(data: unknown, now = Date.now()): Pick<Market
   return { price, change24h, high24h, low24h, volume24h, bid, ask, spread: ask - bid };
 }
 
+export function parseBinanceOrderBook(data: unknown): BinanceOrderBook {
+  if (!data || typeof data !== 'object') throw new Error('Order book Binance inválido');
+  const raw = data as { lastUpdateId?: unknown; bids?: unknown; asks?: unknown };
+  const lastUpdateId = Number(raw.lastUpdateId);
+  const parseSide = (side: unknown, label: string): OrderBookLevel[] => {
+    if (!Array.isArray(side)) throw new Error(`Order book Binance sem ${label}`);
+    return side.map((row: unknown) => {
+      if (!Array.isArray(row) || row.length < 2) throw new Error(`Nível de ${label} inválido`);
+      const price = Number(row[0]);
+      const quantity = Number(row[1]);
+      if (!Number.isFinite(price) || !Number.isFinite(quantity) || price <= 0 || quantity < 0) {
+        throw new Error(`Nível de ${label} inconsistente`);
+      }
+      return { price, quantity, notional: price * quantity };
+    }).filter(level => level.quantity > 0);
+  };
+  const bids = parseSide(raw.bids, 'compra');
+  const asks = parseSide(raw.asks, 'venda');
+  if (!Number.isFinite(lastUpdateId) || lastUpdateId <= 0 || bids.length === 0 || asks.length === 0) {
+    throw new Error('Order book Binance incompleto');
+  }
+  if (bids[0].price >= asks[0].price) throw new Error('Order book Binance cruzado');
+  return { lastUpdateId, bids, asks };
+}
+
 export function parseBinanceCandles(data: unknown): Candle[] {
   if (!Array.isArray(data)) throw new Error('Candles Binance inválidos');
   return data.map((row: unknown): Candle => {
@@ -96,5 +128,13 @@ export async function fetchSpotCandles(symbol: BinancePair, interval: BinanceInt
   if (!Number.isInteger(limit) || limit < 2 || limit > 500) throw new Error('Limite de candles inválido');
   return parseBinanceCandles(await getJson('/api/v3/klines', new URLSearchParams({
     symbol, interval, limit: String(limit),
+  })));
+}
+
+
+export async function fetchSpotOrderBook(symbol: BinancePair, limit = 20): Promise<BinanceOrderBook> {
+  if (![5, 10, 20, 50, 100].includes(limit)) throw new Error('Limite de profundidade inválido');
+  return parseBinanceOrderBook(await getJson('/api/v3/depth', new URLSearchParams({
+    symbol, limit: String(limit),
   })));
 }
