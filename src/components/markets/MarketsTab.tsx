@@ -20,7 +20,7 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [scan, setScan] = useState<Array<{
     symbol: string; classification: string; trend: string; rsi14: number;
-    volumeRatio: number; atrPct: number; price: number; reasons: string[];
+    volumeRatio: number; atrPct: number; price: number; technicalScore: number; reasons: string[];
   }>>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -131,11 +131,10 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
             {scan.map(row => (
               <div key={row.symbol} className="rounded border border-slate-700 p-3 text-xs text-slate-300">
                 <div className="flex justify-between"><strong className="text-white">{row.symbol}</strong>
-                  <span>{row.classification === 'WATCH_BULLISH' ? 'Observar alta' :
-                    row.classification === 'WATCH_BEARISH' ? 'Observar baixa' : 'Sem configuração'}</span>
+                  <span className="font-bold">{row.technicalScore}/100</span>
                 </div>
-                <p className="mt-1">RSI {row.rsi14.toFixed(1)} · Volume {row.volumeRatio.toFixed(2)}x · ATR {row.atrPct.toFixed(2)}%</p>
-                <p className="mt-1 text-slate-500">{row.trend} · Sem autorização para operar</p>
+                <p className="mt-1">Força técnica {row.technicalScore}/100 · RSI {row.rsi14.toFixed(1)} · Volume {row.volumeRatio.toFixed(2)}x · ATR {row.atrPct.toFixed(2)}%</p>
+                <p className="mt-1 text-slate-500">{row.trend} · {row.classification === 'NO_SETUP' ? 'Sem setup completo' : row.classification.replace('_', ' ')}</p>
               </div>
             ))}
           </div>
