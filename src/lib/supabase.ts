@@ -263,6 +263,7 @@ export const dbService = {
       volume_ratio: snapshot.volumeRatio,
       trend: snapshot.trend,
       classification: snapshot.classification,
+      technical_score: snapshot.technicalScore,
       reasons: snapshot.reasons,
       observed_at: new Date(snapshot.asOf || Date.now()).toISOString(),
     };
