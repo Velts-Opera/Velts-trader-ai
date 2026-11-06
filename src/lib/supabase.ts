@@ -189,9 +189,12 @@ export const dbService = {
   /**
    * Records an order state transition to Supabase (if connected) or local log
    */
-  async saveOrder(order: any, userId?: string) {
-    if (!supabase || !userId) return null;
+  async saveOrder(order: any) {
+    if (!supabase) return null;
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) return null;
+      const userId = authData.user.id;
       const { data, error } = await supabase
         .from('orders')
         .upsert({
@@ -302,11 +305,13 @@ export const dbService = {
   /**
    * Logs AI Agent Committee reasoning to database
    */
-  async logAgentAnalysis(report: any, assetSymbol: string, userId?: string) {
+  async logAgentAnalysis(report: any, assetSymbol: string) {
     if (!supabase) return;
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) return;
       await supabase.from('agent_analysis_logs').insert({
-        user_id: userId,
+        user_id: authData.user.id,
         agent_role: report.agentRole,
         sentiment: report.sentiment,
         confidence_score: report.confidencePct,
