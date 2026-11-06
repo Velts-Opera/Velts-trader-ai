@@ -235,9 +235,9 @@ export function processOrderExecution(
     }
 
     if (currency === 'USD') {
-      newCashUSD += (executedPrice * pos.quantity) + realizedPnL;
+      newCashUSD += (executedPrice * pos.quantity) - fee;
     } else {
-      newCashEUR += (executedPrice * pos.quantity) + (realizedPnL / account.eurUsdRate);
+      newCashEUR += (executedPrice * pos.quantity) - (fee / account.eurUsdRate);
     }
     updatedPositions.splice(existingPosIdx, 1);
   } else {
@@ -269,8 +269,11 @@ export function processOrderExecution(
   }
 
   // Recalculate total equity
-  const unrealizedTotalUSD = updatedPositions.reduce((acc, p) => acc + p.unrealizedPnL, 0);
-  const updatedEquityUSD = newCashUSD + unrealizedTotalUSD;
+  const openPositionValueUSD = updatedPositions.reduce((acc, p) => {
+    const value = p.currentPrice * p.quantity;
+    return acc + (p.currency === 'EUR' ? value * account.eurUsdRate : value);
+  }, 0);
+  const updatedEquityUSD = newCashUSD + openPositionValueUSD;
   const updatedEquityEUR = updatedEquityUSD / account.eurUsdRate;
 
   const updatedAccount: PaperAccount = {
@@ -331,7 +334,7 @@ export function updatePositionsMarketPrice(
       // Execute automatic trigger order
       const fee = calculateSimulatedFee(currentPrice, pos.quantity);
       const realizedPnL = (currentPrice - pos.entryPrice) * pos.quantity - fee;
-      updatedCashUSD += (currentPrice * pos.quantity) + realizedPnL;
+      updatedCashUSD += (currentPrice * pos.quantity) - fee;
       updatedDailyPnL += realizedPnL;
       updatedWeeklyPnL += realizedPnL;
 
@@ -375,8 +378,11 @@ export function updatePositionsMarketPrice(
     }
   }
 
-  const totalUnrealizedUSD = remainingPositions.reduce((acc, p) => acc + p.unrealizedPnL, 0);
-  const updatedEquityUSD = updatedCashUSD + totalUnrealizedUSD;
+  const remainingMarketValueUSD = remainingPositions.reduce((acc, p) => {
+    const value = p.currentPrice * p.quantity;
+    return acc + (p.currency === 'EUR' ? value * account.eurUsdRate : value);
+  }, 0);
+  const updatedEquityUSD = updatedCashUSD + remainingMarketValueUSD;
   const updatedEquityEUR = updatedEquityUSD / account.eurUsdRate;
 
   return {
