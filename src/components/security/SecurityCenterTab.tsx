@@ -78,7 +78,7 @@ export const SecurityCenterTab: React.FC = () => {
     { rule: 'Segregação de Ambientes', desc: 'Separação estrita entre Paper Trading (Sandbox) e Live Trading (Produção).' },
     { rule: 'Air-Gap de Inteligência Artificial', desc: 'Modelos generativos (Gemini) nunca têm posse de chaves privadas ou permissão de saque.' },
     { rule: 'Chaves Somente-Leitura (Read-Only / Trade-Only)', desc: 'Chaves de API sem privilégio de saque (Withdrawal Prohibited by Design).' },
-    { rule: 'Proteção Anti-Replay & Idempotência', desc: 'Tokens únicos por ordem impedem envios duplicados ou ataques de repetição.' },
+    { rule: 'Proteção contra duplicidade', desc: 'Há bloqueio de ordens idênticas no motor paper; o gerenciador de nonce ainda não está acoplado ao fluxo.' },
     { rule: 'Rate Limiting Institucional', desc: 'Limite de 60 requisições por minuto para prevenir falhas em loop e flash crashes.' },
     { rule: 'Isolamento Multi-Tenant (RLS PostgreSQL)', desc: 'Políticas RLS estão definidas no schema; a aplicação no projeto Supabase deve ser validada no banco.' },
     { rule: 'Trilha de Auditoria', desc: 'Logs encadeados em memória nesta versão; persistência externa precisa ser confirmada por ambiente.' },
@@ -149,7 +149,7 @@ export const SecurityCenterTab: React.FC = () => {
               <span>Anti-Replay / Idempotência</span>
             </div>
             <p className="text-slate-400 text-[11px] font-sans">
-              Tokens com nonce único bloqueiam requisições duplicadas ou ataques de repetição.
+              O motor paper bloqueia ordens idênticas em janela curta. O gerenciador de nonce existe, mas ainda não está conectado ao fluxo de execução.
             </p>
           </div>
 
