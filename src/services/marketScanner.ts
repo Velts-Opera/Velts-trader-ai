@@ -18,7 +18,7 @@ export interface ScanResult {
   reasons: string[];
 }
 
-/** Quantitative screening only. This never submits orders or promises a return. */
+/** Quantitative market screening only; informational, read-only, and non-executing. */
 export function scanCandles(symbol: string, candles: Candle[], now = Date.now()): ScanResult {
   if (candles.length < 200) throw new Error('Histórico insuficiente: são necessários 200 candles.');
   const ordered = [...candles].sort((a, b) => a.timestamp - b.timestamp);
