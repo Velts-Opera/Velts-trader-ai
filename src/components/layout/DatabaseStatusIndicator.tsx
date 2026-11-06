@@ -272,10 +272,10 @@ export const DatabaseStatusIndicator: React.FC<DatabaseStatusIndicatorProps> = (
                 <div className="bg-emerald-950/30 border border-emerald-800/50 rounded-lg p-2.5 space-y-1">
                   <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs font-mono">
                     <ShieldCheck className="w-4 h-4" />
-                    Row-Level Security (RLS) Ativo
+                    Conexão Supabase verificada
                   </div>
                   <p className="text-[11px] text-slate-300 leading-tight">
-                    Suas ordens, posições e trilha de auditoria estão isoladas na nuvem por usuário (<code className="text-emerald-400 font-mono">auth.uid()</code>).
+                    O endpoint respondeu à consulta. As políticas RLS devem ser verificadas separadamente no banco antes de considerar o isolamento confirmado.
                   </p>
                 </div>
               </div>
