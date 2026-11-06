@@ -342,11 +342,11 @@ export const SecurityCenterTab: React.FC = () => {
                   <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
                     Esquema PostgreSQL & RLS (Supabase)
                     <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded">
-                      RLS ATIVO
+                      RLS DEFINIDO NO SCHEMA
                     </span>
                   </h3>
                   <span className="text-xs text-slate-400 font-mono">
-                    src/lib/databaseSchema.sql - Multi-tenant isolation por auth.uid()
+                    src/lib/databaseSchema.sql - políticas definidas; aplicação deve ser verificada no Supabase
                   </span>
                 </div>
               </div>
@@ -383,7 +383,7 @@ export const SecurityCenterTab: React.FC = () => {
                 </div>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
                   <span className="text-slate-400 text-[10px] uppercase block">Isolamento Multi-Tenant</span>
-                  <span className="text-emerald-400 font-bold text-sm">auth.uid() = user_id</span>
+                  <span className="text-amber-400 font-bold text-sm">Definido no schema</span>
                 </div>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
                   <span className="text-slate-400 text-[10px] uppercase block">Integridade de Auditoria</span>
