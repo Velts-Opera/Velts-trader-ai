@@ -15,6 +15,7 @@ export interface ScanResult {
   volumeRatio: number;
   trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
   classification: 'WATCH_BULLISH' | 'WATCH_BEARISH' | 'NO_SETUP';
+  technicalScore: number;
   reasons: string[];
 }
 
@@ -45,6 +46,18 @@ export function scanCandles(symbol: string, candles: Candle[], now = Date.now())
     indicators.rsi14 <= 70 && volumeRatio >= 1.2 && atrPct > 0;
   const bearish = indicators.trend === 'BEARISH' && indicators.rsi14 >= 30 &&
     indicators.rsi14 <= 55 && volumeRatio >= 1.2 && atrPct > 0;
+  const trendPoints = indicators.trend === 'NEUTRAL' ? 5 : 25;
+  const emaSpreadPct = latest.close > 0
+    ? Math.abs(indicators.movingAverages.ema20 - indicators.movingAverages.ema50) / latest.close * 100
+    : 0;
+  const emaPoints = emaSpreadPct >= 0.5 ? 20 : emaSpreadPct >= 0.2 ? 12 : 5;
+  const macdPoints = Math.abs(indicators.macd.histogram) > 0 ? 15 : 0;
+  const rsiDistance = Math.abs(indicators.rsi14 - 50);
+  const rsiPoints = rsiDistance >= 15 ? 15 : rsiDistance >= 7 ? 10 : 5;
+  const volumePoints = volumeRatio >= 1.2 ? 15 : volumeRatio >= 0.6 ? 8 : 3;
+  const atrPoints = atrPct >= 0.4 && atrPct <= 3.5 ? 10 : 3;
+  const technicalScore = Math.min(100, trendPoints + emaPoints + macdPoints + rsiPoints + volumePoints + atrPoints);
+
   const reasons = [
     `Tendência: ${indicators.trend}`,
     `RSI(14): ${indicators.rsi14.toFixed(2)}`,
@@ -58,6 +71,7 @@ export function scanCandles(symbol: string, candles: Candle[], now = Date.now())
     macdHistogram: indicators.macd.histogram, atrPct: Number(atrPct.toFixed(3)),
     volumeRatio: Number(volumeRatio.toFixed(3)), trend: indicators.trend,
     classification: bullish ? 'WATCH_BULLISH' : bearish ? 'WATCH_BEARISH' : 'NO_SETUP',
+    technicalScore,
     reasons,
   };
 }
