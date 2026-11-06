@@ -108,7 +108,7 @@ test('closing paper position settles proceeds once and does not duplicate PnL', 
 
   const closed = processOrderExecution({
     symbol: 'BTC/USD', side: 'SELL', type: 'MARKET', quantity: 0.01,
-    targetPrice: 1100, stopLossPrice: 1200, currency: 'USD',
+    targetPrice: 1300, stopLossPrice: 1400, currency: 'USD',
   }, opened, 0.1, DEFAULT_RISK_CONFIG).account;
 
   assert.equal(closed.positions.length, 0);
