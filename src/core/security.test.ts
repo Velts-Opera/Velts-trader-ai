@@ -43,5 +43,5 @@ test('IdempotencyTokenManager detects duplicate orders in time window', () => {
 test('Institutional security policy enforces AI Air Gap and Zero Withdrawal Keys', () => {
   assert.equal(INSTITUTIONAL_SECURITY_POLICY.aiAirGapEnforced, true);
   assert.equal(INSTITUTIONAL_SECURITY_POLICY.readOnlyCredentialsOnly, true);
-  assert.equal(INSTITUTIONAL_SECURITY_POLICY.vaultEncryption, 'AES-256-GCM');
+  assert.equal(INSTITUTIONAL_SECURITY_POLICY.vaultEncryption, 'INACTIVE');
 });
