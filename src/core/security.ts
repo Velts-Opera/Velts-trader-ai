@@ -22,7 +22,7 @@ export interface AuditLogEntry {
   actor: 'USER' | 'RISK_ENGINE' | 'AI_SUPERVISOR' | 'SYSTEM';
   details: Record<string, any>;
   ipAddress?: string;
-  signature: string; // SHA-256 tamper-evident integrity hash
+  signature: string; // lightweight chained checksum; not a cryptographic signature
 }
 
 export interface SecurityPolicyStatus {
@@ -32,11 +32,12 @@ export interface SecurityPolicyStatus {
   rateLimiterActive: boolean;     // Prevents runaway order loops
   emergencyStopArmable: boolean;  // 1-click circuit breaker
   readOnlyCredentialsOnly: boolean; // No withdrawal permissions allowed
-  complianceStandard: string;     // ISO 27001 & SOC 2 aligned
+  complianceStandard: string;     // descriptive status only; no certification implied
 }
 
 /**
- * Calculates a lightweight SHA-256 equivalent tamper-evident hash for audit chaining
+ * Calculates a lightweight chained checksum for basic tamper evidence.
+ * This is not a cryptographic signature or SHA-256 implementation.
  */
 export function generateAuditSignature(
   timestamp: number,
@@ -89,7 +90,7 @@ export class SlidingWindowRateLimiter {
 }
 
 /**
- * Cryptographic nonce and idempotency token manager
+ * In-memory nonce and idempotency token manager
  */
 export class IdempotencyTokenManager {
   private activeNonces = new Map<string, number>();
