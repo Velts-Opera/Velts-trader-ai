@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { Lock, Mail, Key, ShieldCheck, ArrowRight, UserCheck, X } from 'lucide-react';
+import { Lock, Mail, Key, UserCheck, X } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -133,7 +133,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           /* Login / SignUp Form */
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <p className="text-xs text-slate-400 leading-relaxed font-sans">
-              Acesso seguro com criptografia de ponta a ponta e controle estrito de privilégios.
+              Autenticação via Supabase Auth. Credenciais não são armazenadas pelo frontend do CodexTrader.
             </p>
 
             {isSignUp && (
@@ -144,7 +144,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="Carlos Veltrani"
+                  placeholder="Nome do operador"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-white placeholder-slate-600 font-mono focus:border-emerald-500 focus:outline-hidden"
