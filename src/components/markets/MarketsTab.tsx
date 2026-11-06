@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MarketAsset, MarketCategory } from '../../types/trading';
-import { generateOrderBook } from '../../services/marketData';
 import { Search, TrendingUp, TrendingDown, Bot, PlusCircle } from 'lucide-react';
 
 interface MarketsTabProps {
@@ -41,6 +40,58 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
     }
   };
   const [inspectedAsset, setInspectedAsset] = useState<MarketAsset>(assets[0]);
+  const [orderBook, setOrderBook] = useState<{
+    bids: { price: number; quantity: number; notional: number }[];
+    asks: { price: number; quantity: number; notional: number }[];
+    asOf: number;
+  } | null>(null);
+  const [orderBookError, setOrderBookError] = useState<string | null>(null);
+
+  const binancePair = inspectedAsset.symbol.replace('/', '') as 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT' | 'BNBUSDT';
+
+  useEffect(() => {
+    void runScanner();
+    const id = window.setInterval(() => void runScanner(), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadOrderBook = async () => {
+      if (inspectedAsset.category !== 'crypto') {
+        if (active) {
+          setOrderBook(null);
+          setOrderBookError('Profundidade real disponível apenas para os pares Binance Spot integrados.');
+        }
+        return;
+      }
+      try {
+        const response = await fetch(`/api/market/binance/orderbook?symbol=${encodeURIComponent(binancePair)}&limit=20`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Profundidade Binance indisponível.');
+        const payload = await response.json() as {
+          bids: { price: number; quantity: number; notional: number }[];
+          asks: { price: number; quantity: number; notional: number }[];
+          asOf: number;
+        };
+        if (!Array.isArray(payload.bids) || !Array.isArray(payload.asks)) throw new Error('Resposta inválida da profundidade.');
+        if (active) {
+          setOrderBook(payload);
+          setOrderBookError(null);
+        }
+      } catch (error) {
+        if (active) {
+          setOrderBook(null);
+          setOrderBookError(error instanceof Error ? error.message : 'Falha ao carregar profundidade.');
+        }
+      }
+    };
+    void loadOrderBook();
+    const id = window.setInterval(() => void loadOrderBook(), 5_000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
+  }, [binancePair, inspectedAsset.category]);
 
   const categories: { id: MarketCategory | 'all'; label: string }[] = [
     { id: 'all', label: 'Todos os Mercados' },
@@ -58,7 +109,6 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
     return matchesCategory && matchesSearch;
   });
 
-  const orderBook = generateOrderBook(inspectedAsset.price, inspectedAsset.decimalPlaces); // Visualization only; not real exchange liquidity.
 
   return (
     <div className="space-y-6">
@@ -66,7 +116,7 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold text-white">Scanner quantitativo Binance Spot</h2>
-            <p className="text-xs text-slate-400">BTC, ETH, SOL e BNB · candles fechados de 1h · somente leitura</p>
+            <p className="text-xs text-slate-400">BTC, ETH, SOL e BNB · candles fechados de 1h · atualização automática a cada 60s</p>
           </div>
           <button onClick={() => void runScanner()} disabled={scanning}
             className="rounded bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
@@ -215,23 +265,26 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
         <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-4 space-y-4">
           <div className="border-b border-slate-800 pb-2">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
-              Profundidade Ilustrativa
+              Profundidade Binance Spot
             </h3>
-            <span className="text-[11px] text-slate-400 font-mono">{inspectedAsset.symbol} — dados simulados, não usar para negociar</span>
+            <span className="text-[11px] text-slate-400 font-mono">{inspectedAsset.symbol} — livro de ofertas público em tempo quase real</span>
           </div>
 
           <div className="space-y-3 font-mono text-[11px]">
             {/* Asks (Venda) */}
             <div className="space-y-1">
               <span className="text-slate-500 text-[10px] uppercase">Ordens de Venda (Asks)</span>
-              {orderBook.asks.slice(-4).reverse().map((ask, i) => (
+              {orderBook?.asks.slice(0, 4).reverse().map((ask, i) => (
                 <div key={i} className="flex justify-between text-rose-400 bg-rose-950/20 px-2 py-0.5 rounded">
                   <span>${ask.price.toFixed(inspectedAsset.decimalPlaces)}</span>
-                  <span className="text-slate-400">{ask.amount}</span>
-                  <span className="text-slate-500">${ask.total}</span>
+                  <span className="text-slate-400">{ask.quantity.toFixed(5)}</span>
+                  <span className="text-slate-500">${ask.notional.toFixed(2)}</span>
                 </div>
               ))}
             </div>
+
+            {orderBookError && <p role="alert" className="text-[10px] text-rose-400">{orderBookError}</p>}
+            {!orderBook && !orderBookError && <p className="text-[10px] text-slate-500">Carregando profundidade real...</p>}
 
             {/* Mid Price */}
             <div className="py-1 px-2 bg-slate-800 rounded text-center font-bold text-white text-xs">
@@ -242,11 +295,11 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
             {/* Bids (Compra) */}
             <div className="space-y-1">
               <span className="text-slate-500 text-[10px] uppercase">Ordens de Compra (Bids)</span>
-              {orderBook.bids.slice(0, 4).map((bid, i) => (
+              {orderBook?.bids.slice(0, 4).map((bid, i) => (
                 <div key={i} className="flex justify-between text-emerald-400 bg-emerald-950/20 px-2 py-0.5 rounded">
                   <span>${bid.price.toFixed(inspectedAsset.decimalPlaces)}</span>
-                  <span className="text-slate-400">{bid.amount}</span>
-                  <span className="text-slate-500">${bid.total}</span>
+                  <span className="text-slate-400">{bid.quantity.toFixed(5)}</span>
+                  <span className="text-slate-500">${bid.notional.toFixed(2)}</span>
                 </div>
               ))}
             </div>
