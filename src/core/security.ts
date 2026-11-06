@@ -123,11 +123,11 @@ export class IdempotencyTokenManager {
  * Global institutional security policy state
  */
 export const INSTITUTIONAL_SECURITY_POLICY: SecurityPolicyStatus = {
-  vaultEncryption: 'AES-256-GCM',
+  vaultEncryption: 'INACTIVE',
   aiAirGapEnforced: true,        // AI models have zero access to financial keys
   idempotencyEnforced: true,     // Replay attack and accidental double-click protection
   rateLimiterActive: true,       // Throttling protection
   emergencyStopArmable: true,    // Kill-switch hardwired to trading loop
   readOnlyCredentialsOnly: true, // Corretora keys never receive withdrawal privileges
-  complianceStandard: 'ISO 27001 / SOC 2 Financial Controls',
+  complianceStandard: 'Internal controls only — no external certification',
 };
