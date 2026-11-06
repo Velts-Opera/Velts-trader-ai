@@ -1,6 +1,21 @@
 import { BacktestParams, BacktestResult, BacktestTrade, Candle } from '../types/trading';
 import { calculateRSI, calculateMACD, calculateSMA, calculateEMA, calculateBollingerBands, calculateATR } from './indicators';
 
+
+function standardDeviation(values: number[]): number {
+  if (values.length <= 1) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / (values.length - 1);
+  return Math.sqrt(variance);
+}
+
+function downsideDeviation(returns: number[], target = 0): number {
+  if (returns.length <= 1) return 0.0001;
+  const negativeDeltas = returns.map(value => Math.min(0, value - target));
+  const sumSquares = negativeDeltas.reduce((sum, value) => sum + Math.pow(value, 2), 0);
+  return Math.sqrt(sumSquares / returns.length);
+}
+
 /**
  * Executes historical backtest simulation
  */
