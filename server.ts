@@ -1,6 +1,8 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import { BINANCE_SPOT_PAIRS, fetchSpotQuotes, fetchSpotCandles, fetchSpotOrderBook, validatePair, validateInterval } from './src/services/binanceSpot';
+import { scanBinanceSpot } from './src/services/marketScanner';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { SlidingWindowRateLimiter, generateAuditSignature, AuditLogEntry, INSTITUTIONAL_SECURITY_POLICY } from './src/core/security';
@@ -40,37 +42,18 @@ app.use('/api', (req, res, next) => {
 });
 
 // In-Memory Immutable Audit Log Chaining
-const auditTrail: AuditLogEntry[] = [
-  {
-    id: 'log_boot_001',
-    timestamp: Date.now() - 3600000,
-    eventType: 'VAULT_ACCESS_ATTEMPT',
-    severity: 'INFO',
-    actor: 'SYSTEM',
-    details: { message: 'Cofre de credenciais inicializado com criptografia AES-256-GCM. Isolamento de IA confirmado.' },
-    signature: generateAuditSignature(Date.now() - 3600000, 'VAULT_ACCESS_ATTEMPT', 'SYSTEM_BOOT'),
-  },
-  {
-    id: 'log_boot_002',
-    timestamp: Date.now() - 1800000,
-    eventType: 'RISK_GATE_APPROVED',
-    severity: 'INFO',
-    actor: 'RISK_ENGINE',
-    details: { message: 'Limites determinísticos ativos: max 0.5% risco, 2% perda diária, 5% perda semanal, alavancagem 1x.' },
-    signature: generateAuditSignature(Date.now() - 1800000, 'RISK_GATE_APPROVED', 'RULES_ACTIVE'),
-  },
-];
+const auditTrail: AuditLogEntry[] = [];
 
 // Initialize Google GenAI on server-side with telemetry User-Agent header
 // CRITICAL: The AI has ZERO access to broker API keys or banking credentials!
-const ai = new GoogleGenAI({
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',
     },
   },
-});
+}) : null;
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -82,6 +65,67 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+
+/**
+ * Public Binance Spot market data. Read-only, no broker credentials or order permissions.
+ * A failed request is surfaced as HTTP 503: never substitute invented prices.
+ */
+app.get('/api/market/binance/status', (_req, res) => {
+  res.json({ provider: 'Binance Spot Public API', mode: 'READ_ONLY',
+    symbols: BINANCE_SPOT_PAIRS, tradingEnabled: false, simulatedOrdersOnly: true });
+});
+
+app.get('/api/market/binance/quotes', async (_req, res) => {
+  try {
+    const quotes = await fetchSpotQuotes();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ provider: 'BINANCE_SPOT', asOf: Date.now(), quotes });
+  } catch (error) {
+    console.error('Binance market quotes unavailable', error);
+    return res.status(503).json({ error: 'Dados de mercado indisponíveis. Sem cotação simulada.' });
+  }
+});
+
+app.get('/api/market/binance/orderbook', async (req, res) => {
+  try {
+    const symbol = validatePair(String(req.query.symbol ?? ''));
+    const limit = Number(req.query.limit ?? 20);
+    const orderBook = await fetchSpotOrderBook(symbol, limit);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ provider: 'BINANCE_SPOT', symbol, asOf: Date.now(), ...orderBook });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const invalid = message.includes('não autorizado') || message.includes('inválido');
+    return res.status(invalid ? 400 : 503).json({ error: invalid ? message : 'Profundidade indisponível na Binance.' });
+  }
+});
+
+app.get('/api/market/binance/scan', async (_req, res) => {
+  try {
+    const result = await scanBinanceSpot();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(result);
+  } catch (error) {
+    console.error('Binance Spot scanner unavailable:', error);
+    return res.status(503).json({ error: 'Scanner indisponível: dados reais insuficientes ou serviço fora do ar.' });
+  }
+});
+
+app.get('/api/market/binance/candles', async (req, res) => {
+  try {
+    const symbol = validatePair(String(req.query.symbol ?? ''));
+    const interval = validateInterval(String(req.query.interval ?? '5m'));
+    const limit = Number(req.query.limit ?? 200);
+    const candles = await fetchSpotCandles(symbol, interval, limit);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ provider: 'BINANCE_SPOT', symbol, interval, candles });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const invalid = message.includes('não autorizado') || message.includes('inválido');
+    return res.status(invalid ? 400 : 503).json({ error: invalid ? message : 'Candles indisponíveis na Binance.' });
+  }
+});
+
 // Security & Vault Status Endpoint
 app.get('/api/security/status', (req, res) => {
   res.json({
@@ -90,21 +134,21 @@ app.get('/api/security/status', (req, res) => {
     brokerConnections: [
       {
         broker: 'Interactive Brokers (Gateway)',
-        status: 'SANDBOX_READY',
+        status: 'NOT_CONNECTED',
         authType: 'OAuth 2.0 / Client Cert',
         readOnly: true,
         withdrawalBlocked: true,
       },
       {
         broker: 'Binance Institutional Spot',
-        status: 'PAPER_TRADING_ACTIVE',
+        status: 'NOT_CONNECTED',
         authType: 'HMAC-SHA256 Encrypted Key',
         readOnly: true,
         withdrawalBlocked: true,
       },
       {
         broker: 'Banco Central / Open Finance Sandbox',
-        status: 'READY',
+        status: 'NOT_CONNECTED',
         authType: 'mTLS / JWT B2B',
         readOnly: true,
         withdrawalBlocked: true,
@@ -146,6 +190,9 @@ app.post('/api/agents/analyze', async (req, res) => {
 
   if (!symbol) {
     return res.status(400).json({ error: 'Asset symbol is required' });
+  }
+  if (!ai) {
+    return res.status(503).json({ error: 'Módulo opcional Gemini não configurado.' });
   }
 
   try {
@@ -217,99 +264,10 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido no seguinte formato:
       }
     }
 
-    // Deterministic Quant Committee Fallback
-    const rsi = indicators?.rsi14 ?? 50;
-    const trend = indicators?.trend ?? 'NEUTRAL';
-    const atr = indicators?.atr14 ?? price * 0.02;
+    return res.status(503).json({
+      error: 'Análise indisponível. Respostas artificiais desativadas por segurança.',
+    });
 
-    const isBullish = rsi > 45 && rsi < 68 && trend === 'BULLISH';
-    const isBearish = rsi < 40 || trend === 'BEARISH';
-
-    const action = isBullish ? 'BUY' : isBearish ? 'SELL' : 'HOLD';
-    const stopDistance = Math.max(atr * 1.5, price * 0.02);
-    const stopLoss = action === 'BUY' ? Number((price - stopDistance).toFixed(4)) : Number((price + stopDistance).toFixed(4));
-    const targetPrice = action === 'BUY' ? Number((price + stopDistance * 2).toFixed(4)) : Number((price - stopDistance * 2).toFixed(4));
-
-    const technicalSentiment = isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
-    const quantSentiment = indicators?.macd?.histogram > 0 ? 'BULLISH' : 'BEARISH';
-
-    const decision = {
-      symbol,
-      action,
-      confidenceScore: isBullish ? 78 : isBearish ? 72 : 55,
-      targetPrice,
-      recommendedStopLoss: stopLoss,
-      recommendedTakeProfit: targetPrice,
-      riskPassed: true,
-      riskManagerComments: `Parâmetros de risco validados. Risco planejado por operação em conformidade com teto de 0.5% e Stop-Loss definido a ${stopLoss}.`,
-      supervisorRationale: `Consenso estabelecido entre os agentes técnico (${technicalSentiment}) e quantitativo (${quantSentiment}). Gestão de risco aprovou os limites operacionais.`,
-      reports: [
-        {
-          agentRole: 'TECHNICAL',
-          agentName: 'Agente Técnico (Quant & Chart)',
-          sentiment: technicalSentiment,
-          confidencePct: isBullish ? 82 : isBearish ? 75 : 58,
-          summary: `RSI em ${rsi.toFixed(1)}, histograma MACD em ${indicators?.macd?.histogram?.toFixed(4) ?? 0}. Tendência estrutural ${trend}.`,
-          keyPoints: [
-            `Suporte imediato detectado em $${indicators?.supportLevel?.toFixed(2) ?? (price * 0.96).toFixed(2)}`,
-            `Resistência chave em $${indicators?.resistanceLevel?.toFixed(2) ?? (price * 1.04).toFixed(2)}`,
-            `Volatilidade medida por ATR(14): ${atr.toFixed(4)}`,
-          ],
-        },
-        {
-          agentRole: 'FUNDAMENTAL',
-          agentName: 'Agente Fundamentalista (Macro & SEC)',
-          sentiment: 'NEUTRAL',
-          confidencePct: 65,
-          summary: 'Análise de liquidez e estabilidade macroeconômica. Sem anúncios de juros ou balanços adversos no curto prazo.',
-          keyPoints: [
-            'Taxas de juros em consonância com as projeções do banco central',
-            'Liquidez de livro de ofertas estável nos pares principais',
-            'Fluxo institucional monitorado via relatórios 13F neutro-positivo',
-          ],
-        },
-        {
-          agentRole: 'QUANTITATIVE',
-          agentName: 'Agente Quantitativo (Probabilidades & Regimes)',
-          sentiment: quantSentiment,
-          confidencePct: 74,
-          summary: `Probabilidade estimada de continuidade de tendência calculada em 64.2%. Regime de mercado: ${trend}.`,
-          keyPoints: [
-            'Ausência de sobreajuste estatístico no ciclo de 30 dias',
-            'Correlação cruzada controlada com índices de referência',
-            'Expectativa matemática calculada positiva (+1.42 R:R)',
-          ],
-        },
-        {
-          agentRole: 'RISK_MANAGER',
-          agentName: 'Gerenciador de Risco (Guardião Determinístico)',
-          sentiment: 'NEUTRAL',
-          confidencePct: 95,
-          summary: 'Validação determinística de exposição e stop-loss. Operação autorizada dentro dos parâmetros.',
-          riskClearance: true,
-          keyPoints: [
-            'Risco máximo por operação limitado a 0.5% do capital',
-            `Stop-loss obrigatório ancorado em ${stopLoss} (distância segura)`,
-            'Alavancagem desabilitada (1x spot)',
-          ],
-        },
-        {
-          agentRole: 'SUPERVISOR',
-          agentName: 'Supervisor Geral (Comitê Executivo)',
-          sentiment: technicalSentiment,
-          confidencePct: 76,
-          summary: `Recomendação final: ${action}. O comitê validou todos os critérios com aprovação unânime do Gerenciador de Risco.`,
-          keyPoints: [
-            `Ação recomendada: ${action}`,
-            `Alvo projetado: ${targetPrice}`,
-            `Proteção Stop-Loss: ${stopLoss}`,
-          ],
-        },
-      ],
-      timestamp: Date.now(),
-    };
-
-    return res.json(decision);
   } catch (err: any) {
     console.error('Error during agent analysis:', err);
     res.status(500).json({ error: 'Falha na deliberação dos agentes', details: err.message });

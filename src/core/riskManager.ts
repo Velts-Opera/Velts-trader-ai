@@ -57,6 +57,13 @@ export function evaluateOrderRisk(
   config: RiskConfig = DEFAULT_RISK_CONFIG
 ): RiskEvaluationResult {
   const violations: string[] = [];
+  if (![currentEquity, dailyPnL, weeklyPnL, order.quantity, order.targetPrice ?? NaN, order.stopLossPrice ?? NaN].every(Number.isFinite) || currentEquity <= 0 || order.quantity <= 0 || !order.targetPrice || order.targetPrice <= 0 || !order.stopLossPrice || order.stopLossPrice <= 0) {
+    violations.push('Parâmetros financeiros inválidos: operação bloqueada.');
+  }
+  if (![config.maxRiskPerTradePct, config.maxAssetExposurePct, config.dailyLossLimitPct, config.weeklyLossLimitPct].every(v => Number.isFinite(v) && v > 0)) {
+    violations.push('Limites de risco inválidos: operação bloqueada.');
+  }
+
 
   // 1. Emergency Kill-Switch Check
   if (config.emergencyStopActivated) {
@@ -104,7 +111,7 @@ export function evaluateOrderRisk(
     calculatedRiskUSD = riskPerUnit * order.quantity;
     riskPct = currentEquity > 0 ? (calculatedRiskUSD / currentEquity) * 100 : 0;
 
-    if (riskPct > config.maxRiskPerTradePct * 1.05) { // allow 5% floating tolerance for rounding
+    if (riskPct > config.maxRiskPerTradePct) { // allow 5% floating tolerance for rounding
       violations.push(
         `Risco planejado (${riskPct.toFixed(2)}%) excede o teto permitido de ${config.maxRiskPerTradePct}% do patrimônio.`
       );
@@ -117,7 +124,7 @@ export function evaluateOrderRisk(
   const newAssetValue = currentAssetValue + orderValue;
   const newExposurePct = currentEquity > 0 ? (newAssetValue / currentEquity) * 100 : 0;
 
-  if (newExposurePct > config.maxAssetExposurePct * 1.01) {
+  if (newExposurePct > config.maxAssetExposurePct) {
     violations.push(
       `Exposição no ativo (${newExposurePct.toFixed(1)}%) ultrapassará o limite máximo de ${config.maxAssetExposurePct}%.`
     );
@@ -138,6 +145,7 @@ export function evaluateOrderRisk(
     ? calculatePositionSize(currentEquity, price, order.stopLossPrice, config.maxRiskPerTradePct)
     : order.quantity;
 
+  if (Number.isFinite(safeQty) && order.quantity > safeQty + 1e-10) violations.push('Quantidade excede o limite seguro.');
   const isApproved = violations.length === 0;
 
   return {

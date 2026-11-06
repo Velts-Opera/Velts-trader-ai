@@ -1,69 +1,19 @@
 import { BacktestParams, BacktestResult, BacktestTrade, Candle } from '../types/trading';
 import { calculateRSI, calculateMACD, calculateSMA, calculateEMA, calculateBollingerBands, calculateATR } from './indicators';
 
-/**
- * Calculates standard deviation of an array
- */
+
 function standardDeviation(values: number[]): number {
   if (values.length <= 1) return 0;
-  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
-  const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length - 1);
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / (values.length - 1);
   return Math.sqrt(variance);
 }
 
-/**
- * Calculates downside deviation (for Sortino Ratio)
- */
 function downsideDeviation(returns: number[], target = 0): number {
   if (returns.length <= 1) return 0.0001;
-  const negativeDeltas = returns.map(r => Math.min(0, r - target));
-  const sumSquares = negativeDeltas.reduce((sum, d) => sum + Math.pow(d, 2), 0);
+  const negativeDeltas = returns.map(value => Math.min(0, value - target));
+  const sumSquares = negativeDeltas.reduce((sum, value) => sum + Math.pow(value, 2), 0);
   return Math.sqrt(sumSquares / returns.length);
-}
-
-/**
- * Generates deterministic historical candlestick data for backtesting
- */
-export function generateSyntheticHistory(
-  basePrice: number,
-  days: number,
-  volatility = 0.02,
-  drift = 0.0005
-): Candle[] {
-  const candles: Candle[] = [];
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-  let price = basePrice;
-
-  // Use seeded pseudo-random for repeatability
-  let seed = 42;
-  const seededRandom = () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
-
-  for (let i = days; i >= 0; i--) {
-    const timestamp = now - i * dayMs;
-    const changePct = (seededRandom() - 0.49) * volatility * 2 + drift;
-    const open = price;
-    const close = Math.max(1, open * (1 + changePct));
-    const high = Math.max(open, close) * (1 + seededRandom() * volatility);
-    const low = Math.min(open, close) * (1 - seededRandom() * volatility);
-    const volume = Math.floor(100000 + seededRandom() * 500000);
-
-    candles.push({
-      timestamp,
-      open: Number(open.toFixed(4)),
-      high: Number(high.toFixed(4)),
-      low: Number(low.toFixed(4)),
-      close: Number(close.toFixed(4)),
-      volume,
-    });
-
-    price = close;
-  }
-
-  return candles;
 }
 
 /**
@@ -73,14 +23,10 @@ export function runBacktestSimulation(
   params: BacktestParams,
   customCandles?: Candle[]
 ): BacktestResult {
-  const basePrice = params.symbol.includes('BTC') ? 68000 :
-                    params.symbol.includes('ETH') ? 3500 :
-                    params.symbol.includes('SOL') ? 175 :
-                    params.symbol.includes('EUR') ? 1.085 : 220;
-
-  const candles = customCandles && customCandles.length > 30
-    ? customCandles
-    : generateSyntheticHistory(basePrice, params.periodDays);
+  if (!customCandles || customCandles.length < 60) {
+    throw new Error('Backtest exige histórico real suficiente; dados sintéticos estão desativados.');
+  }
+  const candles = [...customCandles].sort((a, b) => a.timestamp - b.timestamp);
 
   let capital = params.initialCapital;
   const equityCurve: { date: string; equity: number; drawdown: number }[] = [];
@@ -163,7 +109,7 @@ export function runBacktestSimulation(
         const fee = effectiveExit * activeTrade.quantity * (params.commissionPerTradePct / 100);
         const netPnL = grossPnL - fee;
 
-        capital += (effectiveExit * activeTrade.quantity) + netPnL;
+        capital += effectiveExit * activeTrade.quantity - fee;
 
         const tradeReturnPct = (netPnL / (activeTrade.entryPrice * activeTrade.quantity)) * 100;
         periodReturns.push(tradeReturnPct / 100);
@@ -236,8 +182,9 @@ export function runBacktestSimulation(
   if (activeTrade && candles.length > 0) {
     const last = candles[candles.length - 1];
     const grossPnL = (last.close - activeTrade.entryPrice) * activeTrade.quantity;
-    const netPnL = grossPnL;
-    capital += (last.close * activeTrade.quantity) + netPnL;
+    const fee = last.close * activeTrade.quantity * (params.commissionPerTradePct / 100);
+    const netPnL = grossPnL - fee;
+    capital += last.close * activeTrade.quantity - fee;
     trades.push({
       id: `bt_${trades.length + 1}`,
       entryDate: activeTrade.entryDate,
@@ -320,6 +267,6 @@ export function runBacktestSimulation(
     equityCurve,
     trades: trades.slice(-50), // return last 50 trades
     overfittingRisk,
-    walkForwardVerified: true,
+    walkForwardVerified: false,
   };
 }

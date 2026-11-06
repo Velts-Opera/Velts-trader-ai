@@ -156,10 +156,10 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealthResult> {
     const { error } = await supabase.from('market_data').select('symbol').limit(1);
     const latencyMs = Math.round(performance.now() - start);
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       return {
-        status: 'connected',
-        message: `Conectado ao Cloud PostgreSQL (${latencyMs}ms).`,
+        status: 'error',
+        message: `Endpoint Supabase acessível, mas a consulta falhou: ${error.message}`,
         latencyMs,
         host: getMaskedSupabaseUrl(),
         checkedAt: Date.now(),
@@ -168,7 +168,7 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealthResult> {
 
     return {
       status: 'connected',
-      message: `Conectado ao Cloud PostgreSQL (${latencyMs}ms) com isolamento RLS.`,
+      message: `Supabase respondeu à consulta de leitura (${latencyMs}ms).`,
       latencyMs,
       host: getMaskedSupabaseUrl(),
       checkedAt: Date.now(),
@@ -189,9 +189,12 @@ export const dbService = {
   /**
    * Records an order state transition to Supabase (if connected) or local log
    */
-  async saveOrder(order: any, userId?: string) {
-    if (!supabase || !userId) return null;
+  async saveOrder(order: any) {
+    if (!supabase) return null;
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) return null;
+      const userId = authData.user.id;
       const { data, error } = await supabase
         .from('orders')
         .upsert({
@@ -247,14 +250,69 @@ export const dbService = {
     }
   },
 
+  async saveScannerSnapshot(snapshot: any) {
+    const record = {
+      symbol: snapshot.symbol,
+      timeframe: snapshot.timeframe,
+      price: snapshot.price,
+      rsi14: snapshot.rsi14,
+      ema20: snapshot.ema20,
+      ema50: snapshot.ema50,
+      macd_histogram: snapshot.macdHistogram,
+      atr_pct: snapshot.atrPct,
+      volume_ratio: snapshot.volumeRatio,
+      trend: snapshot.trend,
+      classification: snapshot.classification,
+      technical_score: snapshot.technicalScore,
+      reasons: snapshot.reasons,
+      observed_at: new Date(snapshot.asOf || Date.now()).toISOString(),
+    };
+
+    try {
+      const existing = JSON.parse(localStorage.getItem('codextrader_scanner_history') || '[]');
+      const next = [record, ...existing].slice(0, 200);
+      localStorage.setItem('codextrader_scanner_history', JSON.stringify(next));
+    } catch {
+      // localStorage may be unavailable in private/restricted contexts.
+    }
+
+    if (!supabase) return { cloudSaved: false, localSaved: true };
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) return { cloudSaved: false, localSaved: true };
+      const { error } = await supabase.from('scanner_history').insert({
+        ...record,
+        user_id: authData.user.id,
+      });
+      if (error) {
+        console.warn('Supabase scanner history error:', error.message);
+        return { cloudSaved: false, localSaved: true };
+      }
+      return { cloudSaved: true, localSaved: true };
+    } catch (err) {
+      console.warn('Failed to persist scanner history:', err);
+      return { cloudSaved: false, localSaved: true };
+    }
+  },
+
+  async getLocalScannerHistory() {
+    try {
+      return JSON.parse(localStorage.getItem('codextrader_scanner_history') || '[]');
+    } catch {
+      return [];
+    }
+  },
+
   /**
    * Logs AI Agent Committee reasoning to database
    */
-  async logAgentAnalysis(report: any, assetSymbol: string, userId?: string) {
+  async logAgentAnalysis(report: any, assetSymbol: string) {
     if (!supabase) return;
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) return;
       await supabase.from('agent_analysis_logs').insert({
-        user_id: userId,
+        user_id: authData.user.id,
         agent_role: report.agentRole,
         sentiment: report.sentiment,
         confidence_score: report.confidencePct,

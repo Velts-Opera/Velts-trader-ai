@@ -49,17 +49,17 @@ export const SecurityCenterTab: React.FC = () => {
       name: 'Interactive Brokers (TWS / Gateway)',
       assetType: 'Ações US, ETFs, Forex Spot',
       authMethod: 'OAuth 2.0 / Client TLS mTLS',
-      status: 'SANDBOX VALIDADO',
-      keyStorage: 'Cofre Backend AES-256-GCM',
+      status: 'NÃO CONECTADO',
+      keyStorage: 'Não configurado',
       readOnly: true,
       withdrawalsDisabled: true,
     },
     {
-      name: 'Binance Institutional Spot',
-      assetType: 'Criptomoedas Spot (BTC, ETH, SOL)',
-      authMethod: 'HMAC-SHA256 Encrypted Sign',
-      status: 'SANDBOX VALIDADO',
-      keyStorage: 'Cofre Backend AES-256-GCM',
+      name: 'Binance Spot Public API',
+      assetType: 'BTC, ETH, SOL e BNB / USDT',
+      authMethod: 'Nenhuma credencial — dados públicos',
+      status: 'API PÚBLICA / SEM CHAVE',
+      keyStorage: 'Não necessário para market data',
       readOnly: true,
       withdrawalsDisabled: true,
     },
@@ -67,8 +67,8 @@ export const SecurityCenterTab: React.FC = () => {
       name: 'Banco Central / Open Finance Gateway',
       assetType: 'Cotações de Câmbio & Liquidação EUR/USD',
       authMethod: 'B2B Certificate Authentication',
-      status: 'PRONTO PARA PRODUÇÃO',
-      keyStorage: 'Cofre Backend AES-256-GCM',
+      status: 'NÃO CONECTADO',
+      keyStorage: 'Não configurado',
       readOnly: true,
       withdrawalsDisabled: true,
     },
@@ -78,10 +78,10 @@ export const SecurityCenterTab: React.FC = () => {
     { rule: 'Segregação de Ambientes', desc: 'Separação estrita entre Paper Trading (Sandbox) e Live Trading (Produção).' },
     { rule: 'Air-Gap de Inteligência Artificial', desc: 'Modelos generativos (Gemini) nunca têm posse de chaves privadas ou permissão de saque.' },
     { rule: 'Chaves Somente-Leitura (Read-Only / Trade-Only)', desc: 'Chaves de API sem privilégio de saque (Withdrawal Prohibited by Design).' },
-    { rule: 'Proteção Anti-Replay & Idempotência', desc: 'Tokens únicos por ordem impedem envios duplicados ou ataques de repetição.' },
+    { rule: 'Proteção contra duplicidade', desc: 'Há bloqueio de ordens idênticas no motor paper; o gerenciador de nonce ainda não está acoplado ao fluxo.' },
     { rule: 'Rate Limiting Institucional', desc: 'Limite de 60 requisições por minuto para prevenir falhas em loop e flash crashes.' },
-    { rule: 'Isolamento Multi-Tenant (RLS PostgreSQL)', desc: 'Row Level Security ativo no Supabase isolando users, orders, positions, market_data e audit_logs por auth.uid().' },
-    { rule: 'Trilha de Auditoria Criptográfica', desc: 'Registros imutáveis com assinatura hash encadeada para auditoria externa.' },
+    { rule: 'Isolamento Multi-Tenant (RLS PostgreSQL)', desc: 'Políticas RLS estão definidas no schema; a aplicação no projeto Supabase deve ser validada no banco.' },
+    { rule: 'Trilha de Auditoria', desc: 'Logs encadeados em memória nesta versão; persistência externa precisa ser confirmada por ambiente.' },
   ];
 
   const filteredLogs = auditLogs.filter(log => {
@@ -104,11 +104,11 @@ export const SecurityCenterTab: React.FC = () => {
                   Centro de Segurança Institucional & Integrações Bancárias
                 </h2>
                 <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded font-bold">
-                  PADRÃO BANCÁRIO ATIVO
+                  CONTROLES EM DESENVOLVIMENTO
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl font-sans leading-relaxed">
-                Arquitetura de isolamento de privilégios: proteção contra vazamento de credenciais, cofre de chaves no backend e isolamento (air-gap) entre os modelos generativos de IA e a custódia financeira.
+                Estado real das proteções implementadas e das integrações ainda não conectadas. Nenhuma certificação ou conexão é presumida.
               </p>
             </div>
           </div>
@@ -116,7 +116,7 @@ export const SecurityCenterTab: React.FC = () => {
           <div className="flex items-center gap-2 text-xs font-mono">
             <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-800 text-right">
               <span className="text-[10px] text-slate-500 uppercase block">Criptografia do Cofre</span>
-              <span className="text-white font-bold">{INSTITUTIONAL_SECURITY_POLICY.vaultEncryption}</span>
+              <span className="text-white font-bold">NÃO CONFIGURADO</span>
             </div>
           </div>
         </div>
@@ -149,7 +149,7 @@ export const SecurityCenterTab: React.FC = () => {
               <span>Anti-Replay / Idempotência</span>
             </div>
             <p className="text-slate-400 text-[11px] font-sans">
-              Tokens com nonce único bloqueiam requisições duplicadas ou ataques de repetição.
+              O motor paper bloqueia ordens idênticas em janela curta. O gerenciador de nonce existe, mas ainda não está conectado ao fluxo de execução.
             </p>
           </div>
 
@@ -159,7 +159,7 @@ export const SecurityCenterTab: React.FC = () => {
               <span>Saques Desabilitados</span>
             </div>
             <p className="text-slate-400 text-[11px] font-sans">
-              Chaves de integração possuem permissão estrita de trading spot, proibindo saques.
+              Nenhuma chave privada de corretora está configurada nesta versão.
             </p>
           </div>
         </div>
@@ -178,7 +178,7 @@ export const SecurityCenterTab: React.FC = () => {
             </p>
           </div>
           <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2.5 py-1 rounded">
-            Cofre Seguro (AES-256)
+            Sem cofre de corretora configurado
           </span>
         </div>
 
@@ -201,7 +201,7 @@ export const SecurityCenterTab: React.FC = () => {
                   <td className="px-6 py-3 text-indigo-400">{conn.authMethod}</td>
                   <td className="px-6 py-3">
                     <span className="text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> BLOQUEADO (Seguro)
+                      <XCircle className="w-3.5 h-3.5" /> NÃO APLICÁVEL
                     </span>
                   </td>
                   <td className="px-6 py-3 text-center">
@@ -225,7 +225,7 @@ export const SecurityCenterTab: React.FC = () => {
               Controles de Auditoria Bancária
             </h3>
             <span className="text-[10px] text-slate-400 font-sans block mt-0.5">
-              Alinhamento com diretrizes SOC 2 / Open Finance
+              Controles técnicos internos; sem certificação SOC 2/Open Finance
             </span>
           </div>
 
@@ -262,10 +262,10 @@ export const SecurityCenterTab: React.FC = () => {
             <div>
               <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
                 <FileCheck2 className="w-4 h-4 text-emerald-400" />
-                Trilha de Auditoria Imutável (Audit Trail com Hash Criptográfico)
+                Trilha de Auditoria do Servidor
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Cada evento gera assinatura encadeada contra adulteração.
+                Cada evento recebe assinatura encadeada em memória; reiniciar o servidor reinicia essa trilha.
               </p>
             </div>
 
@@ -342,11 +342,11 @@ export const SecurityCenterTab: React.FC = () => {
                   <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
                     Esquema PostgreSQL & RLS (Supabase)
                     <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded">
-                      RLS ATIVO
+                      RLS DEFINIDO NO SCHEMA
                     </span>
                   </h3>
                   <span className="text-xs text-slate-400 font-mono">
-                    src/lib/databaseSchema.sql - Multi-tenant isolation por auth.uid()
+                    src/lib/databaseSchema.sql - políticas definidas; aplicação deve ser verificada no Supabase
                   </span>
                 </div>
               </div>
@@ -383,7 +383,7 @@ export const SecurityCenterTab: React.FC = () => {
                 </div>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
                   <span className="text-slate-400 text-[10px] uppercase block">Isolamento Multi-Tenant</span>
-                  <span className="text-emerald-400 font-bold text-sm">auth.uid() = user_id</span>
+                  <span className="text-amber-400 font-bold text-sm">Definido no schema</span>
                 </div>
                 <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
                   <span className="text-slate-400 text-[10px] uppercase block">Integridade de Auditoria</span>

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { MarketAsset, CommitteeDecision, Currency } from '../../types/trading';
 import { buildIndicatorSnapshot } from '../../core/indicators';
-import { generateCandlesForAsset } from '../../services/marketData';
 import { runAgentCommitteeAnalysis } from '../../services/geminiAgents';
 import { 
   Bot, 
@@ -34,22 +33,32 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [decision, setDecision] = useState<CommitteeDecision | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const handleRunCommittee = async () => {
     setLoading(true);
+    setAnalysisError(null);
+    setDecision(null);
     try {
-      const candles = generateCandlesForAsset(selectedAsset.price, 60, 60);
-      const indicators = buildIndicatorSnapshot(candles);
+      const pair = selectedAsset.symbol.replace('/', '') + 'T';
+      const response = await fetch(`/api/market/binance/candles?symbol=${encodeURIComponent(pair)}&interval=1h&limit=200`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Candles reais indisponíveis para este ativo.');
+      const payload = await response.json() as { candles: import('../../types/trading').Candle[] };
+      if (!Array.isArray(payload.candles) || payload.candles.length < 200) {
+        throw new Error('Histórico insuficiente para análise.');
+      }
+      const indicators = buildIndicatorSnapshot(payload.candles);
       const res = await runAgentCommitteeAnalysis(
         selectedAsset.symbol,
-        selectedAsset.price,
+        payload.candles[payload.candles.length - 1].close,
         indicators,
         currency,
         `Mercado ${selectedAsset.category}. Volume 24h: $${selectedAsset.volume24h.toLocaleString()}. Spread: $${selectedAsset.spread}.`
       );
       setDecision(res);
     } catch (err) {
-      console.error('Failed to run committee:', err);
+      console.error('Analysis unavailable:', err);
+      setAnalysisError(err instanceof Error ? err.message : 'Análise indisponível.');
     } finally {
       setLoading(false);
     }
@@ -88,13 +97,13 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-              Comitê de Inteligência Artificial — VELTS AGENTS
+              Análise Assistida — CodexTrader V1
               <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800">
-                Gemini 3.8 Flash
+                Gemini opcional
               </span>
             </h2>
             <p className="text-xs text-slate-400">
-              5 agentes especializados deliberando em tempo real com supervisão e guarda determinística de risco.
+              Módulo experimental: análise baseada em candles reais; não equivale à aprovação de ordens.
             </p>
           </div>
         </div>
@@ -138,6 +147,12 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
           </button>
         </div>
       </div>
+
+      {analysisError && (
+        <div role="alert" className="border border-rose-500/30 bg-slate-900 rounded p-4 text-sm text-rose-300">
+          {analysisError}
+        </div>
+      )}
 
       {/* Decision Showcase Banner (Supervisor Consensus) */}
       {decision && (
@@ -198,7 +213,7 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
                 <span className="text-slate-400 text-[10px] uppercase">Guarda de Risco</span>
                 <div className="text-xs font-bold text-emerald-400 mt-0.5 flex items-center gap-1">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Aprovado Deterministicamente</span>
+                  <span>{decision.riskPassed ? 'Indicação do módulo — não verificada pelo executor' : 'Não aprovado para execução'}</span>
                 </div>
               </div>
             </div>

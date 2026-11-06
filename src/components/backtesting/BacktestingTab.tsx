@@ -19,10 +19,25 @@ export const BacktestingTab: React.FC<BacktestingTabProps> = ({ assets, strategi
 
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [running, setRunning] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleRunBacktest = () => {
+  const handleRunBacktest = async () => {
     setRunning(true);
-    setTimeout(() => {
+    setErrorMessage(null);
+    setResult(null);
+    try {
+      const pair = symbol.replace('/', '') + 'T';
+      const limit = Math.min(500, periodDays + 60);
+      const response = await fetch(
+        `/api/market/binance/candles?symbol=${encodeURIComponent(pair)}&interval=1d&limit=${limit}`,
+        { cache: 'no-store' }
+      );
+      if (!response.ok) throw new Error('Histórico real da Binance indisponível.');
+      const payload = await response.json() as { candles?: import('../../types/trading').Candle[] };
+      if (!Array.isArray(payload.candles) || payload.candles.length < 60) {
+        throw new Error('Histórico real insuficiente para o backtest.');
+      }
+
       const params: BacktestParams = {
         symbol,
         strategyId,
@@ -33,11 +48,13 @@ export const BacktestingTab: React.FC<BacktestingTabProps> = ({ assets, strategi
         commissionPerTradePct: commissionPct,
         riskPerTradePct,
       };
-
-      const res = runBacktestSimulation(params);
-      setResult(res);
+      const candles = payload.candles.slice(-Math.min(payload.candles.length, periodDays + 50));
+      setResult(runBacktestSimulation(params, candles));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao executar backtest real.');
+    } finally {
       setRunning(false);
-    }, 400);
+    }
   };
 
   return (
@@ -101,7 +118,6 @@ export const BacktestingTab: React.FC<BacktestingTabProps> = ({ assets, strategi
               <option value={90}>90 Dias</option>
               <option value={180}>180 Dias (6M)</option>
               <option value={365}>1 Ano (365D)</option>
-              <option value={1095}>3 Anos (1095D)</option>
             </select>
           </div>
 
@@ -153,6 +169,12 @@ export const BacktestingTab: React.FC<BacktestingTabProps> = ({ assets, strategi
           </div>
         </div>
       </div>
+
+      {errorMessage && (
+        <div role="alert" className="rounded border border-rose-800 bg-rose-950/30 p-3 text-xs text-rose-300">
+          {errorMessage}
+        </div>
+      )}
 
       {/* Backtest Results Display */}
       {result ? (
@@ -236,8 +258,8 @@ export const BacktestingTab: React.FC<BacktestingTabProps> = ({ assets, strategi
               </span>
               <div className="flex justify-between">
                 <span className="text-slate-400">Walk-Forward Validation:</span>
-                <span className="text-emerald-400 flex items-center gap-1 font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5" /> APROVADO
+                <span className={`${result.walkForwardVerified ? 'text-emerald-400' : 'text-amber-400'} flex items-center gap-1 font-bold`}>
+                  <ShieldCheck className="w-3.5 h-3.5" /> {result.walkForwardVerified ? 'VALIDADO' : 'NÃO EXECUTADO'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -251,7 +273,7 @@ export const BacktestingTab: React.FC<BacktestingTabProps> = ({ assets, strategi
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-sans mt-1">
-                A estratégia foi testada com controle de look-ahead bias e períodos alternados.
+                O resultado usa candles históricos reais da Binance. Walk-forward separado ainda não foi executado.
               </p>
             </div>
           </div>

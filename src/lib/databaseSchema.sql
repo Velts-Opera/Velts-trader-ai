@@ -199,6 +199,35 @@ CREATE TABLE IF NOT EXISTS agent_analysis_logs (
 CREATE INDEX IF NOT EXISTS idx_agent_logs_user ON agent_analysis_logs (user_id, created_at DESC);
 
 -- ==============================================================================
+-- 8.1 SCANNER HISTORY TABLE
+-- Stores technical scanner observations for authenticated operators.
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS scanner_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    symbol TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    price NUMERIC(20, 8) NOT NULL CHECK (price > 0),
+    rsi14 NUMERIC(8, 4),
+    ema20 NUMERIC(20, 8),
+    ema50 NUMERIC(20, 8),
+    macd_histogram NUMERIC(20, 8),
+    atr_pct NUMERIC(10, 5),
+    volume_ratio NUMERIC(12, 5),
+    trend TEXT NOT NULL CHECK (trend IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+    classification TEXT NOT NULL,
+    technical_score INTEGER NOT NULL CHECK (technical_score >= 0 AND technical_score <= 100),
+    reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+    observed_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scanner_history_user_time
+    ON scanner_history (user_id, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scanner_history_symbol_time
+    ON scanner_history (symbol, observed_at DESC);
+
+-- ==============================================================================
 -- 9. ROW-LEVEL SECURITY (RLS) POLICIES
 -- Strict user isolation enforcing auth.uid() = user_id
 -- ==============================================================================
@@ -210,6 +239,7 @@ ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE market_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_analysis_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scanner_history ENABLE ROW LEVEL SECURITY;
 
 -- 9.2 USERS Policies
 CREATE POLICY "users_select_own"
@@ -290,6 +320,19 @@ CREATE POLICY "agent_analysis_select_own"
 CREATE POLICY "agent_analysis_insert_own"
     ON agent_analysis_logs FOR INSERT
     WITH CHECK (auth.uid() = user_id);
+
+-- 9.8 SCANNER HISTORY Policies
+CREATE POLICY "scanner_history_select_own"
+    ON scanner_history FOR SELECT
+    TO authenticated
+    USING ((select auth.uid()) = user_id);
+
+CREATE POLICY "scanner_history_insert_own"
+    ON scanner_history FOR INSERT
+    TO authenticated
+    WITH CHECK ((select auth.uid()) = user_id);
+
+GRANT SELECT, INSERT ON public.scanner_history TO authenticated;
 
 -- ==============================================================================
 -- 10. AUTOMATIC PROFILE CREATION ON USER SIGNUP (Supabase Auth Hook)

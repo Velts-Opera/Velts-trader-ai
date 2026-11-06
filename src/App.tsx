@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MarketAsset, Currency, RiskConfig, StrategyDefinition, Position, Order, CommitteeDecision } from './types/trading';
-import { INITIAL_ASSETS, EUR_USD_RATE, simulateMarketTick } from './services/marketData';
+import { INITIAL_ASSETS, EUR_USD_RATE } from './services/marketData';
 import { DEFAULT_RISK_CONFIG } from './core/riskManager';
 import { PaperAccount, processOrderExecution, updatePositionsMarketPrice } from './core/tradingEngine';
 import { Header } from './components/layout/Header';
@@ -21,7 +21,8 @@ import { dbService } from './lib/supabase';
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [currency, setCurrency] = useState<Currency>('USD');
-  const [assets, setAssets] = useState<MarketAsset[]>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<MarketAsset[]>(INITIAL_ASSETS.filter(a => a.category === 'crypto'));
+  const [isMarketDataReady, setIsMarketDataReady] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MarketAsset>(INITIAL_ASSETS[0]);
   const [riskConfig, setRiskConfig] = useState<RiskConfig>(DEFAULT_RISK_CONFIG);
 
@@ -31,10 +32,7 @@ export default function App() {
   const [isAutomatedRunning, setIsAutomatedRunning] = useState(false);
 
   // Authenticated operator session
-  const [currentUser, setCurrentUser] = useState<{ email: string; name: string } | null>({
-    email: 'veltrani@gmail.com',
-    name: 'Carlos Veltrani',
-  });
+  const [currentUser, setCurrentUser] = useState<{ email: string; name: string } | null>(null);
 
   // Initialize paper trading account with $100,000 USD virtual balance
   const [account, setAccount] = useState<PaperAccount>({
@@ -102,82 +100,61 @@ export default function App() {
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
 
-  // Market Live Micro-Tick Simulator & Stop-Loss/Take-Profit Automated Monitor
   useEffect(() => {
-    const interval = setInterval(() => {
-      setAssets((prev) => {
-        const updated = simulateMarketTick(prev);
-        const priceMap: Record<string, number> = {};
-        updated.forEach((a) => {
-          priceMap[a.symbol] = a.price;
+    let stopped = false;
+    let inFlight = false;
+    const updateQuotes = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch('/api/market/binance/quotes', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Binance Spot indisponível');
+        const data = await response.json() as {
+          quotes: Record<string, Pick<MarketAsset,
+            'price' | 'change24h' | 'high24h' | 'low24h' | 'volume24h' | 'bid' | 'ask' | 'spread'>>;
+        };
+        if (stopped) return;
+        setIsMarketDataReady(true);
+        setSelectedAsset(previous => {
+          const quote = data.quotes[previous.symbol.replace('/', '') + 'T'];
+          return quote ? { ...previous, ...quote } : previous;
         });
-
-        setAccount((prevAccount) => {
-          if (prevAccount.positions.length === 0) return prevAccount;
-          const { updatedAccount, triggeredOrders } = updatePositionsMarketPrice(prevAccount, priceMap);
-          if (triggeredOrders.length > 0) {
-            triggeredOrders.forEach((o) => {
-              dbService.recordAudit('AUTOMATIC_TRIGGER_EXIT', { orderId: o.id, symbol: o.symbol });
-            });
-          }
+        setAssets(previous => previous.map(asset => {
+          if (asset.category !== 'crypto') return asset;
+          const pair = asset.symbol.replace('/', '') + 'T';
+          const quote = data.quotes[pair];
+          return quote ? { ...asset, ...quote } : asset;
+        }));
+        const prices: Record<string, number> = {};
+        for (const asset of assetsRef.current) {
+          const pair = asset.symbol.replace('/', '') + 'T';
+          const quote = data.quotes[pair];
+          if (quote) prices[asset.symbol] = quote.price;
+        }
+        setAccount(previous => {
+          if (previous.positions.length === 0) return previous;
+          const { updatedAccount } = updatePositionsMarketPrice(previous, prices);
           return updatedAccount;
         });
-
-        return updated;
-      });
-    }, 2000);
-
-    return () => clearInterval(interval);
+      } catch (error) {
+        // Do not create or alter prices when upstream market data fails.
+        if (!stopped) setIsMarketDataReady(false);
+        console.warn('Real Binance quotes unavailable; previous snapshot retained.', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+    void updateQuotes();
+    const interval = setInterval(() => void updateQuotes(), 10_000);
+    return () => { stopped = true; clearInterval(interval); };
   }, []);
 
-  // Automated Strategy Execution Cycle
+  // Automated execution is disabled until strategy signals are validated
+  // against live Binance data, backtests and the deterministic risk gate.
   const runAutomatedStrategyCycle = () => {
-    if (riskConfig.emergencyStopActivated) return;
-
-    const activeStrats = strategies.filter((s) => s.isActive);
-    if (activeStrats.length === 0) return;
-
-    const targetAsset = assets[Math.floor(Math.random() * assets.length)];
-    const chosenStrat = activeStrats[Math.floor(Math.random() * activeStrats.length)];
-
-    const slDist = targetAsset.price * 0.02;
-    const stopLossPrice = targetAsset.price - slDist;
-    const takeProfitPrice = targetAsset.price + slDist * 2.5;
-
-    setAccount((prevAccount) => {
-      const { account: newAcc, execution } = processOrderExecution(
-        {
-          symbol: targetAsset.symbol,
-          side: 'BUY',
-          type: 'MARKET',
-          quantity: 1,
-          targetPrice: targetAsset.price,
-          stopLossPrice,
-          takeProfitPrice,
-          currency: targetAsset.currency,
-          strategyId: chosenStrat.id,
-        },
-        prevAccount,
-        targetAsset.spread,
-        riskConfig
-      );
-
-      if (execution.order.state === 'FILLED') {
-        dbService.recordAudit('ORDER_FILLED_AUTO', { symbol: targetAsset.symbol, strat: chosenStrat.name });
-      }
-
-      return newAcc;
-    });
+    console.warn('Automated trading blocked: validated market scanner not ready.');
+    setIsAutomatedRunning(false);
   };
-
-  useEffect(() => {
-    if (!isAutomatedRunning) return;
-    const autoInterval = setInterval(() => {
-      runAutomatedStrategyCycle();
-    }, 15000);
-
-    return () => clearInterval(autoInterval);
-  }, [isAutomatedRunning, strategies, riskConfig, assets]);
 
   // Order execution from modal or agent ticket
   const handleExecuteOrder = (params: {
@@ -202,7 +179,7 @@ export default function App() {
         riskConfig
       );
 
-      dbService.saveOrder(execution.order, currentUser?.email);
+      dbService.saveOrder(execution.order);
       return newAcc;
     });
   };
@@ -263,7 +240,12 @@ export default function App() {
 
       {/* Main Workspace Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
-        {activeTab === 'dashboard' && (
+        {!isMarketDataReady && (
+          <div role="status" className="mb-4 rounded border border-amber-600/40 bg-slate-900 p-4 text-sm text-amber-300">
+            Binance Spot indisponível ou aguardando atualização. Cotações demonstrativas não serão apresentadas.
+          </div>
+        )}
+        {activeTab === 'dashboard' && isMarketDataReady && (
           <OverviewTab
             assets={assets}
             selectedAsset={selectedAsset}
@@ -284,7 +266,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'markets' && (
+        {activeTab === 'markets' && isMarketDataReady && (
           <MarketsTab
             assets={assets}
             onSelectAsset={setSelectedAsset}
@@ -296,7 +278,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'agents' && (
+        {activeTab === 'agents' && isMarketDataReady && (
           <AgentsTab
             assets={assets}
             selectedAsset={selectedAsset}

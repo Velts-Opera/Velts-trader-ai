@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'markets', label: 'Mercados' },
-    { id: 'agents', label: 'Agentes IA' },
+    { id: 'agents', label: 'Análise Assistida' },
     { id: 'strategies', label: 'Estratégias' },
     { id: 'backtest', label: 'Backtesting' },
     { id: 'risk', label: 'Gestão de Risco' },
@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
             V
           </div>
           <span className="text-sm font-bold tracking-tight text-white whitespace-nowrap">
-            VELTS TRADER AI
+            CODEXTRADER V1
           </span>
         </div>
 

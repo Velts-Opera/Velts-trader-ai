@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { Lock, Mail, Key, ShieldCheck, ArrowRight, UserCheck, X } from 'lucide-react';
+import { Lock, Mail, Key, UserCheck, X } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -65,24 +65,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setLoading(false);
       }
     } else {
-      // Offline / Local Institutional Operator fallback
-      setTimeout(() => {
-        setLoading(false);
-        onLoginSuccess({
-          email: email || 'veltrani@trader.velts.ai',
-          name: name || (email ? email.split('@')[0] : 'Operador Institucional'),
-        });
-        onClose();
-      }, 500);
+      setLoading(false);
+      setErrorMessage('Supabase Auth não está configurado. Login local fictício foi desativado.');
     }
-  };
-
-  const handleDemoLogin = () => {
-    onLoginSuccess({
-      email: 'operador.master@velts.ai',
-      name: 'Carlos Veltrani (Master Trader)',
-    });
-    onClose();
   };
 
   return (
@@ -125,8 +110,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span className="text-emerald-400 font-bold">Trader Responsável</span>
               </div>
               <div className="flex justify-between">
-                <span>Autenticação 2FA:</span>
-                <span className="text-emerald-400">Ativa (mTLS / Token)</span>
+                <span>Autenticação:</span>
+                <span className="text-emerald-400">Supabase Auth</span>
               </div>
               <div className="flex justify-between">
                 <span>Banco de Dados:</span>
@@ -148,7 +133,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           /* Login / SignUp Form */
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <p className="text-xs text-slate-400 leading-relaxed font-sans">
-              Acesso seguro com criptografia de ponta a ponta e controle estrito de privilégios.
+              Autenticação via Supabase Auth. Credenciais não são armazenadas pelo frontend do CodexTrader.
             </p>
 
             {isSignUp && (
@@ -159,7 +144,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="Carlos Veltrani"
+                  placeholder="Nome do operador"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-white placeholder-slate-600 font-mono focus:border-emerald-500 focus:outline-hidden"
@@ -215,17 +200,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <Lock className="w-3.5 h-3.5" />
               <span>{loading ? 'Validando...' : isSignUp ? 'Criar Conta de Operador' : 'Entrar na Plataforma'}</span>
             </button>
-
-            {/* Quick Demo Access */}
-            <div className="pt-2 border-t border-slate-800 text-center">
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white rounded text-xs font-mono border border-indigo-500/30 transition-colors cursor-pointer"
-              >
-                Acesso Imediato: Modo Operador Demo (1-Clique)
-              </button>
-            </div>
 
             <div className="text-center pt-1">
               <button
