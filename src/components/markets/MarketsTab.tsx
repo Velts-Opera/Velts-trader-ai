@@ -18,6 +18,28 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [scan, setScan] = useState<Array<{
+    symbol: string; classification: string; trend: string; rsi14: number;
+    volumeRatio: number; atrPct: number; price: number; reasons: string[];
+  }>>([]);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const runScanner = async () => {
+    setScanning(true);
+    setScanError(null);
+    setScan([]);
+    try {
+      const response = await fetch('/api/market/binance/scan', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Scanner indisponível: verifique a Binance.');
+      const payload = await response.json() as { results: typeof scan };
+      if (!Array.isArray(payload.results)) throw new Error('Resposta inválida do scanner.');
+      setScan(payload.results);
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : 'Falha na varredura.');
+    } finally {
+      setScanning(false);
+    }
+  };
   const [inspectedAsset, setInspectedAsset] = useState<MarketAsset>(assets[0]);
 
   const categories: { id: MarketCategory | 'all'; label: string }[] = [
@@ -40,6 +62,33 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
 
   return (
     <div className="space-y-6">
+      <section className="rounded-lg border border-slate-700 bg-slate-900/70 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-white">Scanner quantitativo Binance Spot</h2>
+            <p className="text-xs text-slate-400">BTC, ETH, SOL e BNB · candles fechados de 1h · somente leitura</p>
+          </div>
+          <button onClick={() => void runScanner()} disabled={scanning}
+            className="rounded bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+            {scanning ? 'Analisando...' : 'Varrer mercado'}
+          </button>
+        </div>
+        {scanError && <p role="alert" className="mt-3 text-xs text-rose-400">{scanError}</p>}
+        {scan.length > 0 && (
+          <div className="mt-4 grid gap-2 md:grid-cols-2">
+            {scan.map(row => (
+              <div key={row.symbol} className="rounded border border-slate-700 p-3 text-xs text-slate-300">
+                <div className="flex justify-between"><strong className="text-white">{row.symbol}</strong>
+                  <span>{row.classification === 'WATCH_BULLISH' ? 'Observar alta' :
+                    row.classification === 'WATCH_BEARISH' ? 'Observar baixa' : 'Sem configuração'}</span>
+                </div>
+                <p className="mt-1">RSI {row.rsi14.toFixed(1)} · Volume {row.volumeRatio.toFixed(2)}x · ATR {row.atrPct.toFixed(2)}%</p>
+                <p className="mt-1 text-slate-500">{row.trend} · Sem autorização para operar</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       {/* Category Tabs & Search Bar */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Interactive segmented category tabs */}
