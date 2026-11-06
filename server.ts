@@ -1,7 +1,7 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
-import { BINANCE_SPOT_PAIRS, fetchSpotQuotes, fetchSpotCandles, validatePair, validateInterval } from './src/services/binanceSpot';
+import { BINANCE_SPOT_PAIRS, fetchSpotQuotes, fetchSpotCandles, fetchSpotOrderBook, validatePair, validateInterval } from './src/services/binanceSpot';
 import { scanBinanceSpot } from './src/services/marketScanner';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -83,6 +83,20 @@ app.get('/api/market/binance/quotes', async (_req, res) => {
   } catch (error) {
     console.error('Binance market quotes unavailable', error);
     return res.status(503).json({ error: 'Dados de mercado indisponíveis. Sem cotação simulada.' });
+  }
+});
+
+app.get('/api/market/binance/orderbook', async (req, res) => {
+  try {
+    const symbol = validatePair(String(req.query.symbol ?? ''));
+    const limit = Number(req.query.limit ?? 20);
+    const orderBook = await fetchSpotOrderBook(symbol, limit);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ provider: 'BINANCE_SPOT', symbol, asOf: Date.now(), ...orderBook });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const invalid = message.includes('não autorizado') || message.includes('inválido');
+    return res.status(invalid ? 400 : 503).json({ error: invalid ? message : 'Profundidade indisponível na Binance.' });
   }
 });
 
