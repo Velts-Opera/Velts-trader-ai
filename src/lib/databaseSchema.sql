@@ -216,6 +216,7 @@ CREATE TABLE IF NOT EXISTS scanner_history (
     volume_ratio NUMERIC(12, 5),
     trend TEXT NOT NULL CHECK (trend IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
     classification TEXT NOT NULL,
+    technical_score INTEGER NOT NULL CHECK (technical_score >= 0 AND technical_score <= 100),
     reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
     observed_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
