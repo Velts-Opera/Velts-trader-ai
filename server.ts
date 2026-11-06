@@ -2,6 +2,7 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { BINANCE_SPOT_PAIRS, fetchSpotQuotes, fetchSpotCandles, validatePair, validateInterval } from './src/services/binanceSpot';
+import { scanBinanceSpot } from './src/services/marketScanner';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { SlidingWindowRateLimiter, generateAuditSignature, AuditLogEntry, INSTITUTIONAL_SECURITY_POLICY } from './src/core/security';
@@ -82,6 +83,17 @@ app.get('/api/market/binance/quotes', async (_req, res) => {
   } catch (error) {
     console.error('Binance market quotes unavailable', error);
     return res.status(503).json({ error: 'Dados de mercado indisponíveis. Sem cotação simulada.' });
+  }
+});
+
+app.get('/api/market/binance/scan', async (_req, res) => {
+  try {
+    const result = await scanBinanceSpot();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(result);
+  } catch (error) {
+    console.error('Binance Spot scanner unavailable:', error);
+    return res.status(503).json({ error: 'Scanner indisponível: dados reais insuficientes ou serviço fora do ar.' });
   }
 });
 
