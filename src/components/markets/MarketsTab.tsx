@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MarketAsset, MarketCategory } from '../../types/trading';
 import { Search, TrendingUp, TrendingDown, Bot, PlusCircle } from 'lucide-react';
+import { dbService } from '../../lib/supabase';
 
 interface MarketsTabProps {
   assets: MarketAsset[];
@@ -33,6 +34,7 @@ export const MarketsTab: React.FC<MarketsTabProps> = ({
       const payload = await response.json() as { results: typeof scan };
       if (!Array.isArray(payload.results)) throw new Error('Resposta inválida do scanner.');
       setScan(payload.results);
+      void Promise.all(payload.results.map((row) => dbService.saveScannerSnapshot(row)));
     } catch (error) {
       setScanError(error instanceof Error ? error.message : 'Falha na varredura.');
     } finally {
